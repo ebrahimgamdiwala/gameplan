@@ -1,6 +1,6 @@
 # Moderation decisions
 
-Owner: Ebrahim. Decisions updated: 2026-10-22.
+Owner: Ebrahim. Decisions updated: 2026-10-23.
 
 This log records choices Ebrahim confirmed in this chat.
 The roadmap describes sequencing and contains proposals for later features.
@@ -38,6 +38,10 @@ A recommendation becomes a decision only after Ebrahim accepts it.
 | D29 | Review decisions are Dismiss, Uphold while keeping visible, Hide, and Delete spam. | Require a decision note, resolve the grouped reports together, reuse existing moderation actions, and never automatically ban the author. |
 | D30 | Each report preserves the reported title/body version. | Only authorized moderators with current Space access may see identities, notes, and snapshots. Authors and other reporters cannot read the evidence. |
 | D31 | A new report after resolution opens a fresh review, including for previous reporters. | Limit new reports to 10 per account per hour across the site. Duplicate reports in an active review reuse the existing report without consuming quota. |
+| D32 | Implement T25 as bulk review of pending reports in a separate branch above T16. | Reuse D29’s four decisions and require one shared note. Keep remove-all-by-author and automatic bans separate. |
+| D33 | Keep selection across pages within one Community, capped at 50 reviews. | Include Select this page and Clear selection. Clear selection when the Community or review-status filter changes. |
+| D34 | Each review resolves independently. | One failure does not undo successful decisions. Show per-item outcomes, never retry destructive actions automatically, and require fresh review before retry. |
+| D35 | Preview each target’s current title/text excerpt and report-reason summary before confirmation. | Link to the full review. Recheck permissions and content versions when applying each action; skip changed, inaccessible, deleted, or already-resolved items. |
 
 D05–D07 were confirmed in the first answer accepting scope and assignment authority.
 D08–D10 were confirmed in the next answer accepting private access, eligibility, and the first PR boundary.
@@ -93,7 +97,7 @@ Plan these when their implementation slice is next. Roadmap recommendations do n
 - Audit history UI and retention policy.
 - Temporary bans, automatic expiry, and separate silence behavior.
 - Approval rules, posting limits, slow mode, watched-word matching, and censor behavior.
-- Bulk action selection, progress, partial failures, and undo behavior.
+- Bulk actions outside report review, background processing, and batch undo behavior.
 
 ## Keeping this log current
 
@@ -109,3 +113,11 @@ Keep unresolved questions and implementation choices distinct from confirmed pro
 - Resolving a review checks the content version and current scope before applying existing Hide/Delete spam actions. Dismiss and Uphold preserve content state. Conflicting decisions require refresh.
 - The UI includes report dialogs, Pending/Resolved queues, current author/content, reported versions, and a link to the full discussion. No automatic hiding, banning, notifications, or trust weighting is added.
 - Fresh installation, migration, 71 backend tests, and eight browser tests passed. Four MariaDB concurrency tests are included but skipped on the local SQLite site; they require MariaDB CI.
+
+## T25 implementation notes
+
+- Bulk review reuses T16's Pending queue and four decisions. Moderators select up to 50 reviews across pages, inspect current excerpts and reason counts, and apply one shared note. Full review opens the existing evidence dialog.
+- Preview checks current Community and private-Space access without holding write locks across the batch. It returns no evidence or reporter identities.
+- Each decision uses a separate request through the existing resolver. Permissions, current content, removal state, and review status are checked again. Successful decisions remain committed when another item fails.
+- The dialog shows progress and per-item results. Failed items require selection and a fresh preview before retry. Leaving the page stops unsent requests; there is no background resume. An in-flight decision can still finish.
+- Verification passed: seven bulk-review backend tests, 12 existing reporting tests, three bulk-review browser tests, four existing reporting browser tests, formatting/lint, and the frontend build. Local verification uses the disposable SQLite site; MariaDB concurrency remains covered by the existing CI suite.

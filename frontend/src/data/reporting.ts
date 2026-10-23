@@ -28,3 +28,37 @@ export function canReport(
     (!isGuest(user) || joinedSpaces.data?.includes(String(space.name))),
   )
 }
+
+export type Review = {
+  name: string
+  reference_doctype: string
+  reference_name: string
+  creation?: string
+  decision?: string
+}
+export type ReviewDetails = {
+  review: {
+    status: string
+    decision?: string
+    decision_note?: string
+    decided_by?: string
+    decided_at?: string
+  }
+  current: {
+    title?: string
+    content: string
+    version: string
+    owner: string
+    discussion: string
+    project: string
+  }
+  reports: {
+    name: string
+    owner: string
+    creation: string
+    reason: string
+    note: string
+  }[]
+  evidence: { name: string; reported_title?: string; reported_content: string } | null
+  has_more: boolean
+}
