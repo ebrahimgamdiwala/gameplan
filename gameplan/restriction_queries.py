@@ -93,7 +93,7 @@ def candidates(query: str = "", after: str = ""):
 
 @frappe.whitelist(methods=["GET", "POST"])
 def account_history(user: str, before: str = ""):
-	"""Read one user's site-suspension history; accessible only to global admins."""
+	"""Read one user's site silence and suspension history; accessible only to global admins."""
 	require_scope()
 	Log = frappe.qb.DocType("GP Moderation Log")
 	query = (
@@ -104,7 +104,17 @@ def account_history(user: str, before: str = ""):
 		.where(
 			(Log.user == user)
 			& (Log.community == "")
-			& Log.action.isin(["Suspend", "Suspension Changed", "Lift Suspension", "Restriction Expired"])
+			& Log.action.isin(
+				[
+					"Suspend",
+					"Suspension Changed",
+					"Lift Suspension",
+					"Silence",
+					"Silence Changed",
+					"Lift Silence",
+					"Restriction Expired",
+				]
+			)
 		)
 	)
 	if before:

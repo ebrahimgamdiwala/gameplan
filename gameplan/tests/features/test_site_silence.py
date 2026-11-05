@@ -6,7 +6,7 @@ import frappe
 
 from gameplan.approvals import submit
 from gameplan.community_bans import banned_communities, is_banned
-from gameplan.restriction_queries import account_suspensions, my_bans
+from gameplan.restriction_queries import account_history, account_suspensions, my_bans
 from gameplan.restrictions import require_not_suspended, revoke_sessions, set_restriction, state, utc_now
 from gameplan.tests.base import GameplanTestCase
 from gameplan.tests.fixtures import create_community, create_discussion, create_space
@@ -64,6 +64,8 @@ class TestSiteSilence(GameplanTestCase):
 		self.assertFalse(is_banned(self.community.name, self.outsider.name))
 		self.reply()
 		self.assertEqual(self.actions(), ["Silence", "Suspend", "Silence", "Lift Silence"])
+		history = [row.action for row in account_history(self.outsider.name)["items"]]
+		self.assertEqual(history, ["Lift Silence", "Silence", "Suspend", "Silence"])
 
 	def test_silence_expires_on_the_next_check(self):
 		self.silence(duration_seconds=3600)
