@@ -82,6 +82,33 @@ class TestAuthorCleanup(GameplanTestCase):
 		self.assertTrue(self.removed(self.elsewhere))
 		self.assertEqual(len(self.cleanup_rows(self.other)), 1)
 
+	def test_a_retried_cleanup_removes_and_records_each_post_once(self):
+		with self.as_user(self.member):
+			start(self.outsider.name, "Spam wave", self.community.name)
+		[job] = [call for call in self.enqueue.call_args_list if call.args and call.args[0] is run]
+		kwargs = {k: v for k, v in job.kwargs.items() if k not in ("queue", "enqueue_after_commit")}
+		with self.as_user(self.member):
+			frappe.get_doc("GP Discussion", self.spam.name)._remove_content(
+				"Delete Spam", "Spam wave", cleanup=kwargs["cleanup"]
+			)
+			run(**kwargs)
+			run(**kwargs)
+		[row] = self.cleanup_rows()
+		self.assertEqual(row.title, "Removed 2 posts. Rejected 0 pending submissions.")
+		self.assertEqual(
+			frappe.db.count("GP Moderation Log", {"cleanup": kwargs["cleanup"], "action": "Delete Spam"}), 2
+		)
+
+	def test_a_queued_cleanup_skips_someone_who_became_staff(self):
+		with self.as_user(self.member):
+			start(self.outsider.name, "Spam wave", self.community.name)
+		self.community.set_member_moderator(self.outsider.name, 1)
+		self.run_jobs(self.member)
+		self.assertFalse(self.removed(self.spam))
+		self.assertFalse(self.removed(self.reply))
+		[row] = self.cleanup_rows()
+		self.assertIn("staff role", row.title)
+
 	def test_scope_and_staff_protections(self):
 		for user, community in (
 			(self.outsider, self.community.name),
