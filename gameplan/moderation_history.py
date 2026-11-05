@@ -79,7 +79,9 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 		"reply": (Log.comment.isin(replies) & post_actions, Log.comment),
 		"user": (
 			(Log.community == community)
-			& Log.action.isin(["Ban", "Unban", "Ban Changed", "Restriction Expired"]),
+			& Log.action.isin(
+				["Ban", "Unban", "Ban Changed", "Restriction Expired", "Author Cleanup", "Undo Cleanup"]
+			),
 			Log.user,
 		),
 	}
@@ -105,6 +107,8 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 			Log.slow_mode_seconds,
 			Log.previous_expires_at,
 			Log.expires_at,
+			Log.title,
+			Log.cleanup,
 		)
 		.where(criterion)
 		.orderby(Log.creation, order=frappe.qb.desc)
@@ -114,7 +118,18 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 	).run(as_dict=True)
 	from gameplan.restrictions import iso_expiry
 
+	cleanups = [row.cleanup for row in rows if row.action == "Author Cleanup"]
+	undone = set(
+		frappe.get_all(
+			"GP Moderation Log",
+			filters={"action": "Undo Cleanup", "cleanup": ["in", cleanups]},
+			pluck="cleanup",
+		)
+		if cleanups
+		else []
+	)
 	for row in rows:
 		row.expires_at = iso_expiry(row.expires_at)
 		row.previous_expires_at = iso_expiry(row.previous_expires_at)
+		row.undone = row.cleanup in undone
 	return {"items": rows[:40], "has_more": len(rows) > 40}

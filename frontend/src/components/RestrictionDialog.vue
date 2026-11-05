@@ -54,6 +54,13 @@
       :disabled="saving"
       required
     />
+    <Checkbox
+      v-if="!lifting"
+      v-model="cleanup"
+      class="mt-3"
+      label="Also remove all their posts"
+      :disabled="saving"
+    />
     <ErrorMessage
       v-if="error"
       class="mt-3"
@@ -74,6 +81,7 @@
 import { computed, ref } from 'vue'
 import {
   Button,
+  Checkbox,
   DateTimePicker,
   Dialog,
   ErrorMessage,
@@ -85,7 +93,7 @@ import {
   toast,
 } from 'frappe-ui'
 import { extractServerMessage } from '@/utils'
-import { expiryLabel, type RestrictionUser } from '@/data/restrictions'
+import { expiryLabel, startCleanup, type RestrictionUser } from '@/data/restrictions'
 const props = defineProps<{ user: RestrictionUser; community?: string; lifting?: boolean }>()
 const open = defineModel<boolean>('open')
 const emit = defineEmits<{ saved: [] }>()
@@ -93,6 +101,7 @@ const duration = ref(props.user.modified ? 'keep' : '0')
 const custom = ref('')
 const reason = ref('')
 const kind = ref(props.user.kind || 'Silence')
+const cleanup = ref(false)
 const saving = ref(false)
 const error = ref<unknown>(null)
 const timezone = getConfig('localTimezone') || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -130,6 +139,7 @@ async function save() {
           : { duration_seconds: Number(duration.value) }),
     })
     toast.success('Restriction updated')
+    if (cleanup.value) await startCleanup(props.user.user, reason.value, props.community)
     emit('saved')
     open.value = false
   } catch (e) {
