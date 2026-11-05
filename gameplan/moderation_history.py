@@ -132,4 +132,7 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 		row.expires_at = iso_expiry(row.expires_at)
 		row.previous_expires_at = iso_expiry(row.previous_expires_at)
 		row.undone = row.cleanup in undone
+		# Removal logs keep the restricted original title; only cleanup summaries are public here.
+		if row.action not in ("Author Cleanup", "Undo Cleanup"):
+			row.pop("title")
 	return {"items": rows[:40], "has_more": len(rows) > 40}
