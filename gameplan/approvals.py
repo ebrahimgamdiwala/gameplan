@@ -130,6 +130,7 @@ def queue(community: str = "", status: str = "Pending", start: int = 0):
 			Submission.discussion,
 			Submission.edit_name,
 			Submission.status,
+			Submission.content,
 		)
 		.where(criterion & (Submission.status == status))
 		.orderby(Submission.creation, order=frappe.qb.desc)
@@ -138,7 +139,23 @@ def queue(community: str = "", status: str = "Pending", start: int = 0):
 		.limit(41)
 		.run(as_dict=True)
 	)
-	return {"items": rows[:40], "has_more": len(rows) > 40}
+	has_more = len(rows) > 40
+	rows = rows[:40]
+	discussions = list({row.discussion for row in rows if row.discussion})
+	titles = (
+		{
+			str(name): title
+			for name, title in frappe.get_all(
+				"GP Discussion", filters={"name": ["in", discussions]}, fields=["name", "title"], as_list=True
+			)
+		}
+		if discussions
+		else {}
+	)
+	for row in rows:
+		row.excerpt = frappe.utils.strip_html(row.pop("content") or "").strip()[:160]
+		row.discussion_title = titles.get(row.discussion) if row.discussion else None
+	return {"items": rows, "has_more": has_more}
 
 
 @frappe.whitelist(methods=["GET", "POST"])
