@@ -10,6 +10,15 @@ export type RestrictionUser = {
   modified?: string
 }
 
+// Elapsed-time presets shared by restrictions and slow mode, in seconds.
+export const durationPresets = [
+  { label: '1 hour', value: '3600' },
+  { label: '1 day', value: '86400' },
+  { label: '1 week', value: '604800' },
+  { label: '30 days', value: '2592000' },
+  { label: 'Custom date and time', value: 'custom' },
+]
+
 export async function startCleanup(user: string, reason: string, community = '') {
   await call('gameplan.author_cleanup.start', { user, reason, community })
   toast.success('Cleanup started. The result appears in History.')
