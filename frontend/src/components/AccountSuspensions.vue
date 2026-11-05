@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-4">
     <p class="text-base text-ink-gray-6">
-      Applies to the entire Frappe site and every installed app. Suspended accounts cannot sign in
-      or use API access.
+      Silenced accounts can sign in and read, but cannot participate in any Community. Suspended
+      accounts cannot sign in or use the site, any installed app, or API access.
     </p>
     <div class="space-y-1.5">
       <div class="flex flex-wrap items-end gap-2">
@@ -39,7 +39,7 @@
             </Button>
           </template>
         </Combobox>
-        <Button :disabled="!chosen" @click="edit({ user: chosen })">Suspend account</Button>
+        <Button :disabled="!chosen" @click="edit({ user: chosen })">Restrict account</Button>
         <Button v-if="chosen" @click="showHistory({ user: chosen })">View history</Button>
       </div>
       <p id="account-suspension-user-help" class="text-base text-ink-gray-6">
@@ -48,9 +48,9 @@
     </div>
     <ErrorMessage
       v-if="error"
-      :message="extractServerMessage(error) || 'Could not load suspensions'"
+      :message="extractServerMessage(error) || 'Could not load restrictions'"
     />
-    <p v-if="loading" role="status" class="text-base text-ink-gray-6">Loading suspensions…</p>
+    <p v-if="loading" role="status" class="text-base text-ink-gray-6">Loading restrictions…</p>
     <div
       v-for="item in items"
       :key="item.user"
@@ -63,17 +63,20 @@
             >{{ item.full_name || item.user }}</span
           >
         </div>
-        <p class="mt-2 text-base text-ink-gray-6">{{ expiryLabel(item.expires_at) }}</p>
+        <p class="mt-2 text-base text-ink-gray-6">
+          {{ item.kind === 'Silence' ? 'Silenced' : 'Suspended' }} ·
+          {{ expiryLabel(item.expires_at) }}
+        </p>
         <p class="mt-2 whitespace-pre-wrap break-words text-base">{{ item.reason }}</p>
       </div>
       <div class="flex gap-2">
         <Button @click="edit(item)">Change</Button
-        ><Button @click="edit(item, true)">Lift suspension</Button
+        ><Button @click="edit(item, true)">Lift restriction</Button
         ><Button @click="showHistory(item)">History</Button>
       </div>
     </div>
     <p v-if="!loading && !items.length" class="py-6 text-base text-ink-gray-6">
-      No active account suspensions.
+      No active account restrictions.
     </p>
     <div class="flex gap-2">
       <Button v-if="cursors.length" @click="previous">Previous</Button
@@ -87,7 +90,7 @@
       :lifting="lifting"
       @saved="saved"
     />
-    <Dialog v-model:open="historyOpen" title="Account suspension history">
+    <Dialog v-model:open="historyOpen" title="Account restriction history">
       <ScrollArea class="h-96" viewport-class="h-96 pr-3">
         <div v-for="row in history" :key="row.name" class="border-b border-outline-gray-2 py-4">
           <p class="text-base-medium">

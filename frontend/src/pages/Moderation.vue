@@ -19,7 +19,7 @@
       <template v-if="isGlobalAdmin(useSessionUser())" #administration>
         <SidebarLabel class="mt-6">Site administration</SidebarLabel>
         <SidebarItem
-          label="Account suspensions"
+          label="Account restrictions"
           icon="lucide-shield-ban"
           :active="siteWide && siteSection === 'suspensions'"
           class="mt-0.5"
@@ -77,7 +77,7 @@ const sectionTitles: Record<string, string> = {
 }
 const sectionTitle = computed(() => {
   if (siteWide.value)
-    return siteSection.value === 'posting-limits' ? 'Posting limits' : 'Account suspensions'
+    return siteSection.value === 'posting-limits' ? 'Posting limits' : 'Account restrictions'
   if (!selected.value) return 'Moderation'
   return sectionTitles[String(route.query.tab)] || 'Approvals'
 })
