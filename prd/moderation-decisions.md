@@ -1,6 +1,6 @@
 # Moderation decisions
 
-Owner: Ebrahim. Decisions updated: 2026-11-02.
+Owner: Ebrahim. Decisions updated: 2026-11-05.
 
 This log records choices Ebrahim confirmed in this chat.
 The roadmap describes sequencing and contains proposals for later features.
@@ -128,10 +128,12 @@ Tests: `gameplan/tests/features/test_moderators.py` and `frontend/cypress/e2e/co
 
 Plan these when their implementation slice is next. Roadmap recommendations do not settle them.
 
-- Ordinary members' editing rights and whether a Community can opt into forum-specific rules.
-- Separate silence behavior; timed Community bans and site suspensions are settled below.
-- Flood limits and automatic slow-mode expiry.
-- Bulk actions outside report review, background processing, and batch undo behavior.
+- Whether a Community can opt into forum-specific rules. Editing rights are settled below: authors keep their rights and moderators do not edit other people's posts.
+- Appointing moderators for individual Spaces or groups (deferred by D05).
+- The later enhancements in the roadmap: automatic trust promotion, weighted auto-hide, automatic silencing, AI spam detection, advanced regex rules, and assigning or claiming review items.
+- Migration from Discourse (deferred by D02).
+
+Silence, flood limits, automatic slow-mode expiry, and author-wide cleanup with undo were settled on November 4 and 5, 2026. See the sections below.
 
 ## Keeping this log current
 
