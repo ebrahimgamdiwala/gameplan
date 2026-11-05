@@ -60,7 +60,12 @@ def get_due_profiles(today: date | None = None):
 			["email_digest_frequency", "in", list(EMAIL_DIGEST_FREQUENCY_DAYS)],
 		],
 	).run(as_dict=True)
-	return [profile for profile in profiles if is_digest_due(profile, today)]
+	from gameplan.restrictions import is_suspended
+
+	# A suspended account has no access to the site, so it gets no content by email either.
+	return [
+		profile for profile in profiles if is_digest_due(profile, today) and not is_suspended(profile.user)
+	]
 
 
 def is_digest_due(profile, today: date | None = None):
@@ -171,6 +176,7 @@ def get_unread_notifications(user: str):
 			"from_user",
 			"from_user.full_name as from_user_full_name",
 			"discussion",
+			"comment",
 			"discussion.title as discussion_title",
 			"discussion.slug as discussion_slug",
 			"task",
@@ -185,9 +191,9 @@ def get_unread_notifications(user: str):
 		limit=MAX_DIGEST_ITEMS,
 	).run(as_dict=True)
 
-	from gameplan.mixins.moderation import discussion_is_removed
+	from gameplan.mixins.moderation import notification_is_removed
 
-	return [row for row in rows if not discussion_is_removed(row.discussion)]
+	return [row for row in rows if not notification_is_removed(row)]
 
 
 def get_unread_discussions(user: str):
