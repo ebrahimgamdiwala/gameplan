@@ -13,7 +13,7 @@ describe('Site posting limits', () => {
   it('lets global admins configure limits in site-wide moderation', () => {
     resetData('onboarded')
     cy.visit('/g/moderation?scope=site&tab=posting-limits')
-    cy.contains('h2', 'Posting limits').should('be.visible')
+    cy.contains('header:visible', 'Posting limits').should('be.visible')
     cy.get('#moderation-sidebar [data-slot="sidebar-item"][data-state="active"]').should(
       'have.length',
       1,
@@ -21,7 +21,7 @@ describe('Site posting limits', () => {
     cy.contains('button', 'Account suspensions').click()
     cy.contains('No active account suspensions.').should('be.visible')
     cy.contains('button', 'Posting limits').click()
-    cy.contains('h2', 'Posting limits').should('be.visible')
+    cy.contains('header:visible', 'Posting limits').should('be.visible')
     cy.get('[aria-label="Discussions per hour"]').should('not.exist')
     cy.get('[role="switch"]').should('have.attr', 'aria-checked', 'false').click()
     cy.get('[aria-label="Discussions per hour"]').should('have.value', '5').clear().type('3')
