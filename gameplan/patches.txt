@@ -60,3 +60,4 @@ gameplan.patches.drop_search_index_for_sort_columns
 gameplan.gameplan.doctype.gp_backlink.patches.backfill_backlinks
 
 gameplan.patches.backfill_user_restrictions
+gameplan.gameplan.doctype.gp_posting_settings.patches.set_content_cap_defaults
