@@ -52,16 +52,28 @@ def undo(cleanup: str):
 
 def run(cleanup, community, user, reason, actor):
 	frappe.set_user(actor)
-	if not can_moderate_community(community):
+	# A retried job finds its summary and stops; a resumed one skips posts already removed.
+	if summarized(cleanup) or not can_moderate_community(community):
 		return
-	removed = skipped = 0
+	if is_global_admin(user) or can_moderate_community(community, user):
+		record(
+			"Author Cleanup",
+			cleanup,
+			community,
+			user,
+			"Not run: this person now has a staff role in this Community.",
+			reason,
+		)
+		return
+	done = skipped = 0
 	for doctype, name in authored_posts(user, community):
 		try:
 			frappe.get_doc(doctype, name)._remove_content("Delete Spam", reason, cleanup=cleanup)
-			removed += 1
 		except frappe.PermissionError:
 			skipped += 1
-		commit_every_batch(removed + skipped)
+		done += 1
+		commit_every_batch(done)
+	removed = frappe.db.count("GP Moderation Log", {"cleanup": cleanup, "action": "Delete Spam"})
 	rejected = reject_pending(user, community, reason)
 	note = f"Removed {count(removed, 'post')}. Rejected {count(rejected, 'pending submission')}."
 	if skipped:
@@ -99,6 +111,10 @@ def run_undo(cleanup, actor):
 
 def count(number, noun):
 	return f"{number} {noun}{'' if number == 1 else 's'}"
+
+
+def summarized(cleanup):
+	return frappe.db.exists("GP Moderation Log", {"action": "Author Cleanup", "cleanup": cleanup})
 
 
 def undone(cleanup):
