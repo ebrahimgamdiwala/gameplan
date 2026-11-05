@@ -126,7 +126,7 @@ describe('Watched words', () => {
       cy.switchUser('admin')
       cy.visit(`/g/community/${ids.community}/moderation`)
       cy.contains('button', /^Approvals$/).click()
-      cy.contains('Edit: Welcome thread').should('be.visible')
+      cy.contains('[data-testid="moderation-row"]', 'Welcome thread').should('contain.text', 'Edit')
       cy.contains('button', /^Review$/).click()
       cy.get('[role=dialog]')
         .contains('button:not([role=combobox])', /^Approve$/)

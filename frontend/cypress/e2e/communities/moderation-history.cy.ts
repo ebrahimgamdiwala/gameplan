@@ -37,7 +37,7 @@ describe('Community moderation history', () => {
       rows().should('have.length', 3)
       rows().first().should('contain.text', 'Delete Spam')
       rows().should('contain.text', 'Restore').and('contain.text', 'Off-topic history reason')
-      rows().should('contain.text', 'By Second Member')
+      rows().should('contain.text', 'by Second Member')
       cy.contains('Seed content').should('not.exist')
       cy.reload()
       rows().should('have.length', 3)

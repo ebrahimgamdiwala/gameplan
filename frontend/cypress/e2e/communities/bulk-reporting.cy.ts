@@ -160,7 +160,7 @@ describe('Bulk report review', () => {
         .click()
       cy.wait('@queuePage')
       cy.get('input[aria-label^="Select discussion"]:checked').should('have.length', 40)
-      cy.contains('button', 'Clear selection').scrollIntoView().click()
+      cy.get('[aria-label="Select this page"]').scrollIntoView().click()
       cy.contains('10 of 50 selected').should('be.visible')
       cy.get('[aria-label="Select this page"]').scrollIntoView().click()
       cy.contains('[role="radio"]', 'Resolved').scrollIntoView().click()
