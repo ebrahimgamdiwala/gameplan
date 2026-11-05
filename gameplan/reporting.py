@@ -176,13 +176,15 @@ def queue(community: str, status: str = "Pending", start: int = 0, sort_by: str 
 			)
 	comment_names = {row.reference_name for row in rows if row.reference_doctype == "GP Comment"}
 	comment_discussions = {}
+	authors = {}
 	if comment_names:
 		comments = (
 			frappe.qb.from_(Comment)
-			.select(Comment.name, Comment.reference_name)
+			.select(Comment.name, Comment.reference_name, Comment.owner)
 			.where(Comment.name.isin(comment_names))
 		).run(as_dict=True)
-		comment_discussions = {comment.name: comment.reference_name for comment in comments}
+		comment_discussions = {str(comment.name): str(comment.reference_name) for comment in comments}
+		authors.update({("GP Comment", str(comment.name)): comment.owner for comment in comments})
 	discussion_names = {row.reference_name for row in rows if row.reference_doctype == "GP Discussion"} | set(
 		comment_discussions.values()
 	)
@@ -190,17 +192,19 @@ def queue(community: str, status: str = "Pending", start: int = 0, sort_by: str 
 	if discussion_names:
 		titles = (
 			frappe.qb.from_(Discussion)
-			.select(Discussion.name, Discussion.title)
+			.select(Discussion.name, Discussion.title, Discussion.owner)
 			.where(Discussion.name.isin(discussion_names))
 		).run(as_dict=True)
 		discussion_titles = {str(discussion.name): discussion.title for discussion in titles}
+		authors.update({("GP Discussion", str(discussion.name)): discussion.owner for discussion in titles})
 	for row in rows:
 		discussion = (
 			row.reference_name
 			if row.reference_doctype == "GP Discussion"
-			else comment_discussions.get(row.reference_name)
+			else comment_discussions.get(str(row.reference_name))
 		)
 		row["discussion_title"] = discussion_titles.get(discussion, "")
+		row["author"] = authors.get((row.reference_doctype, str(row.reference_name)))
 		row["report_reasons"] = report_reasons.get(row.name, [])
 	return {"items": rows, "has_more": has_more}
 
