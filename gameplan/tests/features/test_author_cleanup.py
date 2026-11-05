@@ -55,7 +55,7 @@ class TestAuthorCleanup(GameplanTestCase):
 		self.assertFalse(self.removed(self.elsewhere))
 		self.assertEqual(frappe.db.get_value("GP Submission", pending["name"], "status"), "Rejected")
 		[row] = self.cleanup_rows()
-		self.assertEqual(row.title, "Removed 2 posts. Rejected 1 pending submissions.")
+		self.assertEqual(row.title, "Removed 2 posts. Rejected 1 pending submission.")
 		self.assertFalse(row.undone)
 
 	def test_undo_restores_only_posts_still_removed_by_that_cleanup(self):
@@ -69,7 +69,7 @@ class TestAuthorCleanup(GameplanTestCase):
 		self.assertFalse(self.removed(self.spam))
 		self.assertFalse(self.removed(self.reply))
 		undo_row, cleanup_row = self.cleanup_rows()
-		self.assertEqual(undo_row.title, "Restored 1 posts. Skipped 1 changed since the cleanup.")
+		self.assertEqual(undo_row.title, "Restored 1 post. Skipped 1 changed since the cleanup.")
 		self.assertTrue(cleanup_row.undone)
 		with self.as_user(self.member), self.assertRaisesRegex(frappe.ValidationError, "already undone"):
 			undo(cleanup_row.cleanup)

@@ -63,9 +63,9 @@ def run(cleanup, community, user, reason, actor):
 			skipped += 1
 		commit_every_batch(removed + skipped)
 	rejected = reject_pending(user, community, reason)
-	note = f"Removed {removed} posts. Rejected {rejected} pending submissions."
+	note = f"Removed {count(removed, 'post')}. Rejected {count(rejected, 'pending submission')}."
 	if skipped:
-		note += f" Skipped {skipped} posts you cannot moderate."
+		note += f" Skipped {count(skipped, 'post')} you cannot moderate."
 	record("Author Cleanup", cleanup, community, user, note, reason)
 
 
@@ -91,10 +91,14 @@ def run_undo(cleanup, actor):
 		else:
 			skipped += 1
 		commit_every_batch(restored + skipped)
-	note = f"Restored {restored} posts."
+	note = f"Restored {count(restored, 'post')}."
 	if skipped:
 		note += f" Skipped {skipped} changed since the cleanup."
 	record("Undo Cleanup", cleanup, log.community, log.user, note)
+
+
+def count(number, noun):
+	return f"{number} {noun}{'' if number == 1 else 's'}"
 
 
 def undone(cleanup):
