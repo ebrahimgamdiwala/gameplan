@@ -121,6 +121,9 @@
             <template v-else
               >Slow mode: {{ slowModeLabel(slowStatus.seconds) }} between your replies.</template
             >
+            <template v-if="slowStatus.ends_at">
+              Slow mode ends {{ dayjs(slowStatus.ends_at).fromNow() }}.</template
+            >
           </p>
           <p
             v-if="postingMessage && postingWait >= slowWait"
@@ -267,7 +270,7 @@ import Comment from './Comment.vue'
 import Activity from './Activity.vue'
 import Poll from './Poll.vue'
 import UserAvatar from './UserAvatar.vue'
-import { dialog, shellScrollContainer } from 'frappe-ui'
+import { dayjs, dialog, shellScrollContainer } from 'frappe-ui'
 import { subscribeToDoc, useSocket, type NewActivityEvent } from '@/socket'
 import { GPActivity, GPBookmark, GPComment, GPPoll } from '@/types/doctypes'
 import type { Editor } from '@tiptap/vue-3'

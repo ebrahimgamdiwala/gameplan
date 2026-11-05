@@ -33,7 +33,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Action",
-   "options": "Hide\nRestore\nDelete Spam\nBan\nUnban\nSlow Mode Changed\nBan Changed\nSuspend\nSuspension Changed\nLift Suspension\nRestriction Expired\nSilence\nSilence Changed\nLift Silence\nAuthor Cleanup\nUndo Cleanup",
+   "options": "Hide\nRestore\nDelete Spam\nBan\nUnban\nSlow Mode Changed\nBan Changed\nSuspend\nSuspension Changed\nLift Suspension\nRestriction Expired\nSilence\nSilence Changed\nLift Silence\nAuthor Cleanup\nUndo Cleanup\nSlow Mode Expired",
    "reqd": 1
   },
   {
@@ -106,7 +106,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-05 13:00:00.000000",
+ "modified": "2026-11-05 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Gameplan",
  "name": "GP Moderation Log",

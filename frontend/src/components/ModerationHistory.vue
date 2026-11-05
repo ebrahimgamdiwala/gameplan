@@ -52,11 +52,22 @@
         </time>
       </div>
       <p class="mt-1 text-base text-ink-gray-5">
-        By {{ item.action === 'Restriction Expired' ? 'System' : useUser(item.owner).full_name }}
+        By
+        {{
+          ['Restriction Expired', 'Slow Mode Expired'].includes(item.action)
+            ? 'System'
+            : useUser(item.owner).full_name
+        }}
       </p>
-      <p v-if="item.action === 'Slow Mode Changed'" class="mt-2 text-base text-ink-gray-6">
+      <p
+        v-if="['Slow Mode Changed', 'Slow Mode Expired'].includes(item.action)"
+        class="mt-2 text-base text-ink-gray-6"
+      >
         {{ slowModeLabel(item.previous_slow_mode_seconds) }} →
         {{ slowModeLabel(item.slow_mode_seconds) }}
+        <template v-if="item.action === 'Slow Mode Changed' && item.slow_mode_seconds">
+          · {{ item.expires_at ? `Ends ${expiryLabel(item.expires_at)}` : 'Until turned off' }}
+        </template>
       </p>
       <p
         v-if="['Ban', 'Ban Changed', 'Unban', 'Restriction Expired'].includes(item.action)"
@@ -105,7 +116,7 @@ import {
   dayjsLocal,
   toast,
 } from 'frappe-ui'
-import { restrictionTransition } from '@/data/restrictions'
+import { expiryLabel, restrictionTransition } from '@/data/restrictions'
 import { slowModeLabel } from '@/data/slowMode'
 import { useUser } from '@/data/users'
 import { extractServerMessage } from '@/utils'

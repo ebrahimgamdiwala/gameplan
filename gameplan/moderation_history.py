@@ -73,7 +73,8 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 	post_actions = Log.action.isin(["Hide", "Restore", "Delete Spam"])
 	sources = {
 		"discussion": (
-			Log.discussion.isin(discussions) & (post_actions | (Log.action == "Slow Mode Changed")),
+			Log.discussion.isin(discussions)
+			& (post_actions | Log.action.isin(["Slow Mode Changed", "Slow Mode Expired"])),
 			Log.discussion,
 		),
 		"reply": (Log.comment.isin(replies) & post_actions, Log.comment),
