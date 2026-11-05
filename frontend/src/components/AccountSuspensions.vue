@@ -40,6 +40,7 @@
           </template>
         </Combobox>
         <Button :disabled="!chosen" @click="edit({ user: chosen })">Restrict account</Button>
+        <Button v-if="chosen" @click="cleanupOpen = true">Remove all posts</Button>
         <Button v-if="chosen" @click="showHistory({ user: chosen })">View history</Button>
       </div>
       <p id="account-suspension-user-help" class="text-base text-ink-gray-6">
@@ -82,6 +83,12 @@
       <Button v-if="cursors.length" @click="previous">Previous</Button
       ><Button v-if="nextCursor" @click="next">Next</Button>
     </div>
+    <CleanupDialog
+      v-if="cleanupOpen"
+      v-model:open="cleanupOpen"
+      :user="chosen"
+      :label="useUser(chosen).full_name || chosen"
+    />
     <RestrictionDialog
       v-if="selected"
       :key="`${selected.user}-${lifting}`"
@@ -120,6 +127,7 @@ import {
   call,
   dayjsLocal,
 } from 'frappe-ui'
+import CleanupDialog from './CleanupDialog.vue'
 import RestrictionDialog from './RestrictionDialog.vue'
 import { expiryLabel, restrictionTransition, type RestrictionUser } from '@/data/restrictions'
 import { extractServerMessage } from '@/utils'
@@ -130,7 +138,8 @@ const loading = ref(false),
   pickerOpen = ref(false)
 const error = ref<unknown>(null),
   chosen = ref(''),
-  query = ref('')
+  query = ref(''),
+  cleanupOpen = ref(false)
 const options = ref<{ label: string; value: string; image?: string }[]>([])
 const cursor = ref(''),
   nextCursor = ref(''),

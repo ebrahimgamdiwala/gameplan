@@ -135,6 +135,9 @@
                     </template>
                   </Combobox>
                   <Button :disabled="!targetUser" @click="banUser">Ban from Community</Button>
+                  <Button :disabled="!targetUser" @click="cleanupOpen = true"
+                    >Remove all posts</Button
+                  >
                 </div>
                 <div
                   v-for="ban in bans"
@@ -163,6 +166,13 @@
                   No active Community bans.
                 </p>
               </template>
+              <CleanupDialog
+                v-if="cleanupOpen"
+                v-model:open="cleanupOpen"
+                :user="targetUser"
+                :label="useUser(targetUser).full_name || targetUser"
+                :community="communityId"
+              />
               <RestrictionDialog
                 v-if="banTarget"
                 :key="`${banTarget.user}-${liftingBan}`"
@@ -200,6 +210,7 @@
 <script setup lang="ts">
 import { Sidebar, SidebarHeader, SidebarItem, SidebarLabel, ScrollArea } from 'frappe-ui'
 import { useIsMobile } from '@/utils/useIsMobile'
+import CleanupDialog from '@/components/CleanupDialog.vue'
 import RestrictionDialog from '@/components/RestrictionDialog.vue'
 import { expiryLabel, type RestrictionUser } from '@/data/restrictions'
 import WatchedWords from '@/components/WatchedWords.vue'
@@ -276,6 +287,7 @@ const hasMore = ref(false)
 const selected = ref('')
 const previewContent = ref('')
 const targetUser = ref('')
+const cleanupOpen = ref(false)
 const userQuery = ref('')
 const userPickerOpen = ref(false)
 const userSearchLoading = ref(false)

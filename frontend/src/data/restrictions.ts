@@ -1,4 +1,4 @@
-import { dayjs, getConfig } from 'frappe-ui'
+import { call, dayjs, getConfig, toast } from 'frappe-ui'
 
 export type RestrictionUser = {
   user: string
@@ -8,6 +8,11 @@ export type RestrictionUser = {
   kind?: 'Suspend' | 'Silence'
   expires_at?: string | null
   modified?: string
+}
+
+export async function startCleanup(user: string, reason: string, community = '') {
+  await call('gameplan.author_cleanup.start', { user, reason, community })
+  toast.success('Cleanup started. The result appears in History.')
 }
 
 export function expiryLabel(value?: string | null) {
