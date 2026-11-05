@@ -5,9 +5,26 @@
       {{
         community
           ? 'Participation in this Community'
-          : 'Entire Frappe site, including all installed apps and API access'
+          : kind === 'Silence'
+            ? 'Participation in every Community'
+            : 'Entire Frappe site, including all installed apps and API access'
       }}
     </p>
+    <template v-if="!community && !lifting">
+      <Select
+        v-model="kind"
+        label="Restriction"
+        :options="[
+          { label: 'Silence', value: 'Silence' },
+          { label: 'Suspend', value: 'Suspend' },
+        ]"
+        :disabled="saving"
+      />
+      <p class="mb-3 mt-2 text-p-sm text-ink-gray-6">
+        Silence: can sign in and read, but can't post anywhere. Suspend: can't sign in or use the
+        site at all.
+      </p>
+    </template>
     <Select
       v-if="!lifting"
       v-model="duration"
@@ -75,6 +92,7 @@ const emit = defineEmits<{ saved: [] }>()
 const duration = ref(props.user.modified ? 'keep' : '0')
 const custom = ref('')
 const reason = ref('')
+const kind = ref(props.user.kind || 'Silence')
 const saving = ref(false)
 const error = ref<unknown>(null)
 const timezone = getConfig('localTimezone') || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -83,7 +101,7 @@ const title = computed(() =>
     ? 'Lift restriction'
     : props.community
       ? 'Community ban'
-      : 'Suspend account across this site',
+      : 'Restrict account across this site',
 )
 const durations = [
   ...(props.user.modified ? [{ label: 'Keep current expiry', value: 'keep' }] : []),
@@ -104,6 +122,7 @@ async function save() {
       enabled: props.lifting ? 0 : 1,
       reason: reason.value,
       expected_modified: props.user.modified || '',
+      ...(props.community || props.lifting ? {} : { kind: kind.value }),
       ...(duration.value === 'custom'
         ? { expires_at: dayjsLocal(custom.value).toISOString() }
         : duration.value === 'keep'

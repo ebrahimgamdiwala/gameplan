@@ -22,6 +22,7 @@ def active_rows(community="", start=0, after=""):
 		.select(
 			Restriction.user,
 			Restriction.reason,
+			Restriction.kind,
 			Restriction.expires_at,
 			Restriction.modified,
 			User.full_name,
@@ -40,7 +41,7 @@ def active_rows(community="", start=0, after=""):
 
 @frappe.whitelist(methods=["GET", "POST"])
 def account_suspensions(after: str = ""):
-	"""List a cursor-paged set of active whole-site suspensions for global admins."""
+	"""List a cursor-paged set of active whole-site silences and suspensions for global admins."""
 	require_scope()
 	rows = active_rows(after=after)
 	return {
@@ -132,7 +133,7 @@ def account_history(user: str, before: str = ""):
 
 @frappe.whitelist(methods=["GET", "POST"])
 def my_bans():
-	"""Return the caller's active Community ban reasons and exact deadlines."""
+	"""Return the caller's active Community bans and site silence (empty Community), with deadlines."""
 	if frappe.session.user == "Guest" or is_global_admin(frappe.session.user):
 		return []
 	Restriction = frappe.qb.DocType("GP User Restriction")
@@ -141,7 +142,7 @@ def my_bans():
 		.select(Restriction.community, Restriction.reason, Restriction.expires_at)
 		.where(
 			(Restriction.user == frappe.session.user)
-			& (Restriction.community != "")
+			& ((Restriction.community != "") | (Restriction.kind == "Silence"))
 			& active_condition(Restriction)
 		)
 		.run(as_dict=True)

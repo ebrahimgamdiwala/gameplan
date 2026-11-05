@@ -5,6 +5,7 @@ export type RestrictionUser = {
   full_name?: string
   user_image?: string
   reason?: string
+  kind?: 'Suspend' | 'Silence'
   expires_at?: string | null
   modified?: string
 }
@@ -29,8 +30,8 @@ export function restrictionTransition(item: {
           .format('D MMM YYYY, h:mm A z')
       : 'Indefinite'
   if (item.action === 'Restriction Expired') return `Expired at ${date(item.expires_at)}`
-  if (['Unban', 'Lift Suspension'].includes(item.action))
+  if (['Unban', 'Lift Suspension', 'Lift Silence'].includes(item.action))
     return `${date(item.previous_expires_at)} → Lifted`
-  if (['Ban', 'Suspend'].includes(item.action)) return `Expiry: ${date(item.expires_at)}`
+  if (['Ban', 'Suspend', 'Silence'].includes(item.action)) return `Expiry: ${date(item.expires_at)}`
   return `${date(item.previous_expires_at)} → ${date(item.expires_at)}`
 }
