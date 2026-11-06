@@ -14,7 +14,7 @@ def target_fields(doc) -> dict:
 	"""The columns a notification about `doc` fills: what it points at, and the Space it
 	sits in when that cannot be fetched from a discussion."""
 	if doc.doctype == "GP Discussion":
-		return {"discussion": doc.name}
+		return {"discussion": str(doc.name)}
 	if doc.doctype == "GP Poll":
 		return {"poll": doc.name, "discussion": doc.discussion}
 	if doc.doctype == "GP Task":
