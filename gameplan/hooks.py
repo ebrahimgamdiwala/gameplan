@@ -272,7 +272,11 @@ scheduler_events = {
 		"gameplan.posting_limits.prune",
 	],
 	"hourly": ["gameplan.gameplan.doctype.gp_invitation.gp_invitation.expire_invitations"],
-	"daily": ["gameplan.demo.demo.generate_data_daily", "gameplan.email_digest.send_due_email_digests"],
+	"daily": [
+		"gameplan.demo.demo.generate_data_daily",
+		"gameplan.email_digest.send_due_email_digests",
+		"gameplan.trust_levels.promote_trusted",
+	],
 }
 
 # scheduler_events = {

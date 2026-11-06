@@ -26,7 +26,11 @@
   "archived_at",
   "section_break_gvbw",
   "readme",
-  "approval_post_count"
+  "approval_post_count",
+  "trust_levels_enabled",
+  "trust_trusted_count",
+  "trust_trusted_days",
+  "trust_clean_days"
  ],
  "fields": [
   {
@@ -133,6 +137,38 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Approval post count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "trust_levels_enabled",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Trust levels enabled",
+   "read_only": 1
+  },
+  {
+   "default": "25",
+   "fieldname": "trust_trusted_count",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Trusted accepted contributions",
+   "read_only": 1
+  },
+  {
+   "default": "30",
+   "fieldname": "trust_trusted_days",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Trusted days as a member",
+   "read_only": 1
+  },
+  {
+   "default": "90",
+   "fieldname": "trust_clean_days",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Clean record days",
    "read_only": 1
   }
  ],

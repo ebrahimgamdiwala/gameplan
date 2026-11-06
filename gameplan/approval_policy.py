@@ -4,6 +4,7 @@ from frappe.utils import cint
 from gameplan.approval_files import publishing_submission
 from gameplan.community_bans import can_moderate_community
 from gameplan.permissions import get_content_project, require_can_manage_community
+from gameplan.trust_levels import evaluate, is_enabled, promote_on_accept
 
 
 @frappe.whitelist(methods=["GET", "POST"])
@@ -36,7 +37,11 @@ def needs_approval(doc):
 	threshold = cint(frappe.db.get_value("GP Team", community, "approval_post_count"))
 	if not threshold or can_moderate_community(community):
 		return False
-	return counter(community).accepted < threshold
+	row = counter(community)
+	if is_enabled(community):
+		# Levels replace the count (D64). The level sits on the row just read.
+		return (evaluate(community, frappe.session.user, row).level or "New") == "New"
+	return row.accepted < threshold
 
 
 def guard_publication(doc, method=None):
@@ -60,6 +65,8 @@ def record_accepted(doc, method=None):
 		return
 	row = counter(community)
 	frappe.db.set_value("GP Approval Counter", row.name, "accepted", row.accepted + 1)
+	row.accepted += 1
+	promote_on_accept(community, row)
 
 
 def supports_approval(doc):
@@ -68,13 +75,16 @@ def supports_approval(doc):
 	)
 
 
-def counter(community):
-	user = frappe.session.user
+COUNTER_FIELDS = ["name", "user", "accepted", "level", "locked", "level_changed_at", "last_unclean_at"]
+
+
+def counter(community, user=None):
+	user = user or frappe.session.user
 	frappe.db.get_value("User", user, "name", for_update=True)
 	row = frappe.db.get_value(
 		"GP Approval Counter",
 		{"community": community, "user": user},
-		["name", "accepted"],
+		COUNTER_FIELDS,
 		as_dict=True,
 		for_update=True,
 	)
@@ -113,7 +123,9 @@ def counter(community):
 		)
 	row = frappe.get_doc(doctype="GP Approval Counter", community=community, user=user, accepted=accepted)
 	row.insert(ignore_permissions=True)
-	return frappe._dict(name=row.name, accepted=accepted)
+	return frappe._dict(
+		name=row.name, user=user, accepted=accepted, level="New", locked=0, level_changed_at=None, last_unclean_at=None
+	)
 
 
 def delete_counters(doc, method=None):

@@ -278,6 +278,8 @@ def resolve(
 	note = checked_note(note, required=True)
 	if decision in ("Hide", "Delete Spam"):
 		getattr(doc, "hide" if decision == "Hide" else "delete_spam")(note)
+	elif decision == "Uphold":
+		doc._mark_author_unclean()
 	review.db_set(
 		{
 			"status": "Resolved",
