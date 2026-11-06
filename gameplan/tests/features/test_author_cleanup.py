@@ -82,6 +82,40 @@ class TestAuthorCleanup(GameplanTestCase):
 		self.assertTrue(self.removed(self.elsewhere))
 		self.assertEqual(len(self.cleanup_rows(self.other)), 1)
 
+	def test_a_long_cleanup_continues_in_a_new_job_and_summarizes_once(self):
+		with self.as_user(self.member):
+			start(self.outsider.name, "Spam wave", self.community.name)
+		# One post fits in the first slice; the clock then passes its end.
+		with (
+			patch("gameplan.author_cleanup.TIME_BUDGET", 1),
+			patch("gameplan.author_cleanup.clock", side_effect=[0, 0, 2]),
+		):
+			self.run_jobs(self.member)
+		self.assertEqual(self.cleanup_rows(), [])
+		continuation = [call for call in self.enqueue.call_args_list if call.args and call.args[0] is run]
+		self.assertEqual(len(continuation), 1)
+		self.run_jobs(self.member)
+		[row] = self.cleanup_rows()
+		self.assertEqual(row.title, "Removed 2 posts. Rejected 0 pending submissions.")
+
+	def test_a_long_undo_continues_with_its_progress(self):
+		with self.as_user(self.member):
+			start(self.outsider.name, "Spam wave", self.community.name)
+		self.run_jobs(self.member)
+		with self.as_user(self.member):
+			undo(self.cleanup_rows()[0].cleanup)
+		with (
+			patch("gameplan.author_cleanup.TIME_BUDGET", 1),
+			patch("gameplan.author_cleanup.clock", side_effect=[0, 0, 2]),
+		):
+			self.run_jobs(self.member)
+		self.assertEqual([row.action for row in self.cleanup_rows() if row.action == "Undo Cleanup"], [])
+		self.run_jobs(self.member)
+		undo_row = next(row for row in self.cleanup_rows() if row.action == "Undo Cleanup")
+		self.assertEqual(undo_row.title, "Restored 2 posts.")
+		self.assertFalse(self.removed(self.spam))
+		self.assertFalse(self.removed(self.reply))
+
 	def test_a_retried_cleanup_removes_and_records_each_post_once(self):
 		with self.as_user(self.member):
 			start(self.outsider.name, "Spam wave", self.community.name)
