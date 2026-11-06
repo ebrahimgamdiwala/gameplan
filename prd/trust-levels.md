@@ -53,9 +53,18 @@ A background job works through the Community in chunks. It computes each member'
 
 In-app only, to the member, when they are promoted by rule or by hand. Nothing when a level is lowered. The moderator's reason stays staff-only.
 
+## Built in the engine (branch `feat/trust-levels-engine`)
+
+What the engine does where the proposals below were open:
+
+- **Clean record is kept current by moderation actions.** Hiding or spam-removing a member's post, upholding a report on it, and a Community ban each stamp `last_unclean_at` on the member's row. Nothing reads the moderation log when a member is promoted. Restoring a post does not clear the stamp, so a wrongly hidden post can delay Trusted by up to 90 days; a moderator can promote by hand.
+- **Rejoining recomputes.** Leaving a Community deletes the row, including any manual level and lock. A rejoining member is worked out again from their published posts (D39), so they are Member again if enough posts remain, and Trusted needs the days as a member to start over.
+- **Turning levels on** starts the chunked background job (D74). Until it reaches a member, their row is worked out the first time it is read. The staff list only reads stored values and marks members the job has not reached as pending.
+- **Reading endpoints:** `get_settings` and `member_levels` are read-only. `my_level` is POST because it can store a first evaluation, and Frappe discards writes made during a GET.
+
 ## Proposed implementation
 
-These are proposals, not decisions.
+These were proposals when the spec was drafted.
 
 - **Storage:** add `level`, `locked`, and `level_changed_at` to the existing GP Approval Counter row, which is already one row per Community and member. This avoids a second table and a second lookup on the posting path.
 - **Settings:** add `trust_levels_enabled`, `member_threshold`, `trusted_threshold`, `trusted_days`, and `clean_days` to the Community's approval settings. The old threshold field feeds `member_threshold`.
