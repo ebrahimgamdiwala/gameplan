@@ -1,6 +1,6 @@
 # Moderation decisions
 
-Owner: Ebrahim. Decisions updated: 2026-11-05.
+Owner: Ebrahim. Decisions updated: 2026-11-06.
 
 This log records choices Ebrahim confirmed in this chat.
 The roadmap describes sequencing and contains proposals for later features.
@@ -71,6 +71,22 @@ A recommendation becomes a decision only after Ebrahim accepts it.
 | D59 | Censor ordinary reads without changing stored originals, including existing posts. | Cover pages, API responses, search, and notifications. Authors can edit originals. Authorized moderators can inspect them. |
 | D60 | Block identifies matched entries to the author. Keep full lists admin-only. | Limit each action to 2,000 rules per Community, entries to 100 characters, and CSV files to 1 MB. Show invalid row numbers. |
 | D61 | Apply Block, Require approval, and Flag to future writes. | Do not scan old posts. Recheck Block at approval. Approval satisfies the other review actions for that version. |
+| D62 | Add automatic trust levels per Community: New, Member, Trusted. Every contributor has one, including invited Guests. | Levels control only approval and content caps. Posting limits, slow mode, and report weight stay as they are. Staff have no level. |
+| D63 | Trust levels are off by default and switch on and off per Community. | A Community admin or global admin flips the switch. While off, today's approval and caps behavior applies unchanged. There is no site-wide master switch. |
+| D64 | Levels replace D37's accepted-contributions rule. | D37's N becomes the Member threshold. This supersedes D37's "no automated trust engine is required". D44 is unchanged: slow mode has no level exemption. |
+| D65 | New is subject to approval when the Community's approval policy is on. Member skips approval. Trusted skips approval and is exempt from the link, image, file, and mention caps. | Both New and Member keep the site caps. Posting-rate limits apply to everyone but global admins. The stricter public-access Guest caps stay in force at every level. |
+| D66 | Promotion uses three signals: accepted contributions (D38), time as a member of that Community, and a clean record. | No new tracking. Reading time, posts read, and likes are not used. |
+| D67 | Defaults: Member needs 3 accepted contributions. Trusted needs 25 accepted, 30 days as a member, and a clean record. | Community admins and global admins edit the thresholds per Community. Moderators cannot. |
+| D68 | A clean record means that in the last 90 days, in that Community, none of the member's posts were hidden or spam-removed, no report against them was upheld, and they were not banned. | Rejected or withdrawn submissions and dismissed reports do not count. |
+| D69 | Levels never drop automatically. Moderators, Community admins, and global admins can set or lower a level, and lock or unlock it, with a required reason. | Changes appear in History. A lock stops automatic changes. A Community ban pauses promotion while it lasts and does not change the stored level. |
+| D70 | Member promotion happens when the accepted contribution that reaches the threshold is accepted. A nightly job promotes to Trusted. | The job looks only at members whose conditions could have changed, with indexed queries. |
+| D71 | Only staff and the member see a level. Other members never see it, and there is no badge on posts. | A member sees their own level and progress near the approval notice. |
+| D72 | History records every manual change and every automatic promotion to Trusted, shown as System. Automatic promotion to Member is not recorded individually. | The member's panel shows when and why they reached Member. |
+| D73 | A member gets an in-app notification when promoted, automatically or by hand. No email. No notice when a level is lowered, and none for the first calculation. | The moderator's reason stays staff-only. |
+| D74 | Turning levels on runs a chunked background job from existing contributions, membership age, and the moderation log. | Existing approval and caps behavior continues until the job finishes. Staff are skipped. Members who already qualify go straight to Trusted. |
+| D75 | Staff keep a tracked level that applies again if they lose the role. Leaving a Community deletes the level, and rejoining starts at New. | This matches moderator appointments (D09). |
+| D76 | Moderators and admins use a new Trust levels tab in Community moderation. It lists levels, filters by level, and opens a panel of requirements with the manual change and lock actions. | The switch and thresholds sit beside the approval settings, for Community admins only. |
+| D77 | Ship as two stacked PRs above the moderation UI branch: 12/13 for the engine and 13/13 for the UI. Push to Ebrahim's fork without opening PRs. | Each stays below 1,000 changed lines, tests included (D04). |
 
 
 
@@ -130,8 +146,10 @@ Plan these when their implementation slice is next. Roadmap recommendations do n
 
 - Whether a Community can opt into forum-specific rules. Editing rights are settled below: authors keep their rights and moderators do not edit other people's posts.
 - Appointing moderators for individual Spaces or groups (deferred by D05).
-- The later enhancements in the roadmap: automatic trust promotion, weighted auto-hide, automatic silencing, AI spam detection, advanced regex rules, and assigning or claiming review items.
+- The later enhancements in the roadmap: weighted auto-hide, automatic silencing, AI spam detection, advanced regex rules, and assigning or claiming review items.
 - Migration from Discourse (deferred by D02).
+
+Trust levels were settled on November 6, 2026 (D62 to D77). The spec is `prd/trust-levels.md`.
 
 Silence, flood limits, automatic slow-mode expiry, and author-wide cleanup with undo were settled on November 4 and 5, 2026. See the sections below.
 
