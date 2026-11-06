@@ -821,6 +821,19 @@ class TestSearchIndexLifecycle(IsolatedSearchIndex, GameplanTestCase):
 		self.assertEqual(comment_ids_in(other_space), [f"GP Comment:{comment.name}"])
 		self.assertEqual(comment_ids_in(self.space), [])
 
+	def test_a_very_long_list_of_visible_spaces_does_not_break_search(self):
+		discussion = self.create_discussion("Zebrafish migration notes", "Long list of Spaces", self.space)
+		drain_search_index_queue()
+		# Everyone can see every General Space, and each is asked for twice, so a large site passed
+		# more SQL parameters than SQLite allows (32,766) and every search returned nothing.
+		visible = list(range(100_000, 140_000)) + [self.space.name, str(self.space.name)]
+		with (
+			self.as_user(self.member),
+			patch.object(GameplanSearch, "get_search_filters", lambda self: {"project": visible}),
+		):
+			results = self.search.search("Zebrafish")["results"]
+		self.assertEqual([str(row["name"]) for row in results], [str(discussion.name)])
+
 
 class TestDropSearchIndexForSortColumnsPatch(IsolatedSearchIndex, GameplanTestCase):
 	INDEX_NAME = "test_gameplan_search_sort_patch.db"

@@ -39,6 +39,7 @@ SECONDS_PER_DAY = 86400
 CONTENT_PREVIEW_LENGTH = 300
 # Fields the search page can filter on. Any other key is refused.
 SEARCH_FILTER_FIELDS = frozenset({"owner", "project", "team", "doctype", "tags"})
+LONG_FILTER_LIST = 500
 MARK_START = "\x02"
 MARK_END = "\x03"
 
@@ -578,6 +579,11 @@ class GameplanSearch(SQLiteSearch):
 			elif len(values) == 2 and values[0] == "LIKE":
 				conditions.append("(" + " OR ".join([f"{field} LIKE ?"] * len(values[1])) + ")")
 				params.extend(f"%{value}%" for value in values[1])
+			elif len(values) > LONG_FILTER_LIST:
+				# SQLite refuses more than 32,766 bound values and a member of 20,000
+				# Spaces sends 40,000 project ids, so a long list goes in as one JSON value.
+				conditions.append(f"{field} IN (SELECT value FROM json_each(?))")
+				params.append(frappe.as_json(values))
 			else:
 				placeholders = ",".join(["?"] * len(values))
 				conditions.append(f"{field} IN ({placeholders})")
