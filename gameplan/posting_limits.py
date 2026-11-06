@@ -109,12 +109,18 @@ def policy():
 	}
 
 
-def check_caps(doc):
-	"""Refuse a forum post body over a site content cap. Callers apply the staff exemption."""
+def check_caps(doc, community=None):
+	"""Refuse a forum post body over a site content cap. Callers apply the staff exemption.
+
+	A Trusted member of a Community with trust levels on is exempt from these four caps (D65).
+	"""
 	from gameplan.new_user_limits import count_post_contents
+	from gameplan.trust_levels import is_trusted
 
 	config = policy()
 	if not config["caps_enabled"]:
+		return
+	if community and is_trusted(community):
 		return
 	counts = count_post_contents(doc.content)
 	for field, (key, singular, plural) in CAPS.items():

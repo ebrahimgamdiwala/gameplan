@@ -10,7 +10,11 @@
  "field_order": [
   "community",
   "user",
-  "accepted"
+  "accepted",
+  "level",
+  "locked",
+  "level_changed_at",
+  "last_unclean_at"
  ],
  "fields": [
   {
@@ -33,6 +37,33 @@
    "fieldname": "accepted",
    "fieldtype": "Int",
    "label": "Accepted"
+  },
+  {
+   "default": "New",
+   "fieldname": "level",
+   "fieldtype": "Select",
+   "label": "Level",
+   "options": "New\nMember\nTrusted",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "locked",
+   "fieldtype": "Check",
+   "label": "Locked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "level_changed_at",
+   "fieldtype": "Datetime",
+   "label": "Level changed at",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_unclean_at",
+   "fieldtype": "Datetime",
+   "label": "Last unclean event at",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
