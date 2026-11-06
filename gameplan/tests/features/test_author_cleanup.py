@@ -89,6 +89,8 @@ class TestAuthorCleanup(GameplanTestCase):
 		with (
 			patch("gameplan.author_cleanup.TIME_BUDGET", 1),
 			patch("gameplan.author_cleanup.clock", side_effect=[0, 0, 2]),
+			# A real commit would keep this test's data for the tests that run after it.
+			patch("frappe.db.commit"),
 		):
 			self.run_jobs(self.member)
 		self.assertEqual(self.cleanup_rows(), [])
@@ -107,6 +109,8 @@ class TestAuthorCleanup(GameplanTestCase):
 		with (
 			patch("gameplan.author_cleanup.TIME_BUDGET", 1),
 			patch("gameplan.author_cleanup.clock", side_effect=[0, 0, 2]),
+			# A real commit would keep this test's data for the tests that run after it.
+			patch("frappe.db.commit"),
 		):
 			self.run_jobs(self.member)
 		self.assertEqual([row.action for row in self.cleanup_rows() if row.action == "Undo Cleanup"], [])
