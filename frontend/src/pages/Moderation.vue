@@ -73,6 +73,7 @@ const sectionTitles: Record<string, string> = {
   removed: 'Removed content',
   bans: 'Community bans',
   words: 'Watched words',
+  levels: 'Trust levels',
   history: 'History',
 }
 const sectionTitle = computed(() => {

@@ -119,6 +119,8 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 			Log.expires_at,
 			Log.title,
 			Log.cleanup,
+			Log.previous_level,
+			Log.level,
 		)
 		.where(criterion)
 		.orderby(Log.creation, order=frappe.qb.desc)

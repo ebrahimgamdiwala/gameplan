@@ -284,6 +284,7 @@ function markAsRead(name: string) {
 }
 
 function notificationRoute(notification: NotificationRow): RouteLocationRaw | null {
+  if (notification.type === 'Trust Level') return { name: 'MySubmissions' }
   if (notification.discussion) {
     return {
       name: 'Discussion',
@@ -315,6 +316,7 @@ function notificationRoute(notification: NotificationRow): RouteLocationRaw | nu
 
 function notificationIcon(notification: NotificationRow) {
   if (notification.type === 'Rich Quote') return 'lucide-text-quote'
+  if (notification.type === 'Trust Level') return 'lucide-award'
   return 'lucide-at-sign'
 }
 
@@ -322,6 +324,7 @@ function notificationTargetTitle(notification: NotificationRow) {
   if (notification.poll) return pollTitles.value.get(String(notification.poll))
   if (notification.discussion) return discussionTitles.value.get(String(notification.discussion))
   if (notification.task) return taskTitles.value.get(String(notification.task))
+  if (notification.type === 'Trust Level') return notificationLocation(notification) || null
   return null
 }
 
@@ -393,7 +396,7 @@ function shortTimestamp(timestamp: string) {
 }
 
 function showAvatar(notification: NotificationRow) {
-  return Boolean(notification.from_user && notification.type !== 'Reaction')
+  return Boolean(notification.from_user && !['Reaction', 'Trust Level'].includes(notification.type))
 }
 
 function confirmMarkAllAsRead() {
