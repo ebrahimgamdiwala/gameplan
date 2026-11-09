@@ -34,7 +34,11 @@ describe('Trust levels', () => {
 
       row('Second Member').find('button[aria-label="More actions"]').click()
       cy.contains('[role="menuitem"]', 'Show requirements').click()
-      cy.get('[data-testid="trust-requirements"]').should('contain.text', 'for Member')
+      // No job worker runs here, so the member is still waiting for the background job.
+      cy.get('[data-testid="trust-requirements"]').should(
+        'contain.text',
+        'not reached this member yet',
+      )
 
       row('Second Member')
         .contains('button', /^\s*Change\s*$/)
