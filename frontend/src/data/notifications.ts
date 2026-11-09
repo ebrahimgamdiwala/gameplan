@@ -128,6 +128,7 @@ export type NotificationRow = Pick<
 export function notificationRoute(
   notification: Omit<NotificationRow, 'read' | 'last_event_at' | 'message' | 'event_count'>,
 ): RouteLocationRaw | null {
+  if (notification.type === 'Trust Level') return { name: 'MySubmissions' }
   if (notification.discussion) {
     return {
       name: 'Discussion',
@@ -173,6 +174,7 @@ export function notificationIcon(notification: { type?: string }) {
   if (notification.type === 'Added') return 'lucide-user-plus'
   if (notification.type === 'Moved') return 'lucide-corner-up-right'
   if (notification.type === 'Poll Vote') return 'lucide-bar-chart-2'
+  if (notification.type === 'Trust Level') return 'lucide-award'
   return 'lucide-at-sign'
 }
 

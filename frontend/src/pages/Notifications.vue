@@ -125,6 +125,7 @@ import {
 } from '@/data/notificationFilters'
 import {
   type NotificationRow,
+  notificationLocation,
   onRemoteNotificationChange,
   rememberNotificationRows,
   unreadNotifications,
@@ -308,6 +309,7 @@ function notificationTargetTitle(notification: NotificationRow) {
   if (notification.poll) return pollTitles.value.get(String(notification.poll))
   if (notification.discussion) return discussionTitles.value.get(String(notification.discussion))
   if (notification.task) return taskTitles.value.get(String(notification.task))
+  if (notification.type === 'Trust Level') return notificationLocation(notification) || null
   return null
 }
 
