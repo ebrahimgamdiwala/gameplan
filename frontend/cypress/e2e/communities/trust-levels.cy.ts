@@ -72,7 +72,7 @@ describe('Trust levels', () => {
         .should('contain.text', 'Acme')
         .and('contain.text', 'Trusted')
       cy.visit('/g/notifications')
-      cy.contains('You are now a Trusted in Acme.').should('be.visible')
+      cy.contains('You are now Trusted in Acme.').should('be.visible')
 
       cy.switchUser('member')
       cy.request({
