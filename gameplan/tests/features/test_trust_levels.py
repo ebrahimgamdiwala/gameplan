@@ -10,17 +10,15 @@ from gameplan.posting_limits import save_settings as save_caps
 from gameplan.restrictions import utc_now
 from gameplan.tests.base import GameplanTestCase
 from gameplan.tests.fixtures import create_community, create_discussion, create_space
-from gameplan.trust_levels import backfill
-from gameplan.trust_levels import promote_trusted as run_promote_trusted
 from gameplan.trust_levels import (
-	member_levels,
-	my_level,
+	backfill,
 	save_settings,
 	set_member_level,
 	set_member_lock,
 	settings,
 	target_level,
 )
+from gameplan.trust_levels import promote_trusted as run_promote_trusted
 
 
 def config(**values):
@@ -51,7 +49,9 @@ class TestTargetLevel(GameplanTestCase):
 class TestTrustLevels(GameplanTestCase):
 	def setUp(self):
 		super().setUp()
-		self.community = create_community("Trust levels", members=[self.member, self.second_member, self.outsider])
+		self.community = create_community(
+			"Trust levels", members=[self.member, self.second_member, self.outsider]
+		)
 		self.community.set_member_moderator(self.second_member.name, 1)
 		self.space = create_space("Trust Space", self.community)
 		self.parent = create_discussion("Parent", self.space, owner=self.outsider)
@@ -83,7 +83,7 @@ class TestTrustLevels(GameplanTestCase):
 			)
 
 	def accept(self, count):
-		"""Get `count` contributions accepted: approved from the queue, or published directly once a Member."""
+		"""Get `count` contributions accepted: approved from the queue, or published once a Member."""
 		for _ in range(count):
 			result = self.submit()
 			if result.get("status") != "Pending":
@@ -92,10 +92,10 @@ class TestTrustLevels(GameplanTestCase):
 				row = detail(result["name"])
 				decide(result["name"], "Approve", str(row.modified), "")
 
-	def promote_trusted(self, **kwargs):
+	def promote_trusted(self):
 		# The job commits as it goes; a test must not keep its data.
 		with patch("frappe.db.commit"):
-			run_promote_trusted(**kwargs)
+			run_promote_trusted()
 
 	def level_logs(self, action):
 		return frappe.get_all(
@@ -117,9 +117,13 @@ class TestTrustLevels(GameplanTestCase):
 			create_discussion(f"Existing {index}", self.space, owner=self.member)
 		self.turn_on()
 		with self.as_user(self.member):
-			self.assertEqual(needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name)), False)
+			self.assertEqual(
+				needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name)), False
+			)
 		self.assertEqual(self.row().level, "Member")
-		self.assertFalse(frappe.db.exists("GP Notification", {"to_user": self.member.name, "type": "Trust Level"}))
+		self.assertFalse(
+			frappe.db.exists("GP Notification", {"to_user": self.member.name, "type": "Trust Level"})
+		)
 
 	def test_turning_levels_back_on_keeps_a_level_that_was_already_earned(self):
 		self.turn_on()
@@ -128,7 +132,7 @@ class TestTrustLevels(GameplanTestCase):
 		self.turn_on(enabled=0)
 		self.turn_on()
 		with self.as_user(self.member):
-			my_level(self.community.name)
+			needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name))
 		self.assertEqual(self.row().level, "Member")
 
 	def test_the_backfill_works_out_every_member_silently_and_skips_staff(self):
@@ -150,20 +154,6 @@ class TestTrustLevels(GameplanTestCase):
 		self.assertEqual(enqueue.call_args.kwargs["community"], str(self.community.name))
 		self.assertTrue(enqueue.call_args.kwargs["after"])
 
-	def test_the_member_list_only_reads_and_marks_members_the_job_has_not_reached(self):
-		for index in range(3):
-			create_discussion(f"Existing {index}", self.space, owner=self.member)
-		self.turn_on()
-		with self.as_user(self.second_member):
-			before = {item["user"]: item for item in member_levels(self.community.name)["members"]}
-		self.assertEqual((before[self.member.name]["level"], before[self.member.name]["pending"]), ("New", 1))
-		self.assertIsNone(self.row())
-		with patch("frappe.db.commit"):
-			backfill(self.community.name)
-		with self.as_user(self.second_member):
-			after = {item["user"]: item for item in member_levels(self.community.name)["members"]}
-		self.assertEqual((after[self.member.name]["level"], after[self.member.name]["pending"]), ("Member", 0))
-
 	# Promotion ------------------------------------------------------------------------------
 
 	def test_a_member_is_promoted_when_the_threshold_contribution_is_accepted_and_told(self):
@@ -174,7 +164,9 @@ class TestTrustLevels(GameplanTestCase):
 		self.accept(1)
 		self.assertEqual(self.row().level, "Member")
 		self.assertEqual(self.submit()["doctype"], "GP Discussion")
-		self.assertTrue(frappe.db.exists("GP Notification", {"to_user": self.member.name, "type": "Trust Level"}))
+		self.assertTrue(
+			frappe.db.exists("GP Notification", {"to_user": self.member.name, "type": "Trust Level"})
+		)
 
 	def test_a_new_member_is_still_held_when_the_approval_policy_is_on(self):
 		self.turn_on()
@@ -195,7 +187,10 @@ class TestTrustLevels(GameplanTestCase):
 		self.promote_trusted()
 		self.assertEqual(self.row().level, "Trusted")
 		logs = self.level_logs("Trusted Promotion")
-		self.assertEqual([(log.user, log.previous_level, log.level) for log in logs], [(self.member.name, "Member", "Trusted")])
+		self.assertEqual(
+			[(log.user, log.previous_level, log.level) for log in logs],
+			[(self.member.name, "Member", "Trusted")],
+		)
 
 	def test_the_nightly_job_waits_for_the_days_as_a_member(self):
 		self.turn_on(trusted_days=30)
@@ -206,10 +201,14 @@ class TestTrustLevels(GameplanTestCase):
 	def test_a_recent_unclean_event_holds_back_trusted_and_an_old_one_does_not(self):
 		self.turn_on()
 		self.accept(4)
-		frappe.db.set_value("GP Approval Counter", self.row().name, "last_unclean_at", utc_now() - timedelta(days=10))
+		frappe.db.set_value(
+			"GP Approval Counter", self.row().name, "last_unclean_at", utc_now() - timedelta(days=10)
+		)
 		self.promote_trusted()
 		self.assertEqual(self.row().level, "Member")
-		frappe.db.set_value("GP Approval Counter", self.row().name, "last_unclean_at", utc_now() - timedelta(days=100))
+		frappe.db.set_value(
+			"GP Approval Counter", self.row().name, "last_unclean_at", utc_now() - timedelta(days=100)
+		)
 		self.promote_trusted()
 		self.assertEqual(self.row().level, "Trusted")
 
@@ -240,24 +239,33 @@ class TestTrustLevels(GameplanTestCase):
 		self.assertEqual(self.row().level, "Member")
 
 	def test_the_nightly_job_continues_in_a_new_job_after_its_time_budget(self):
+		from gameplan.trust_levels import promote_community
+
 		self.turn_on()
 		self.accept(4)
-		with patch("frappe.enqueue") as enqueue:
-			self.promote_trusted(budget=-1)
+		with patch("frappe.db.commit"), patch("frappe.enqueue") as enqueue:
+			promote_community(self.community.name, budget=-1)
 		enqueue.assert_called_once()
-		self.assertTrue(enqueue.call_args.kwargs["after"].startswith(f"{self.community.name}|"))
+		self.assertEqual(enqueue.call_args.kwargs["community"], self.community.name)
+		self.assertTrue(enqueue.call_args.kwargs["after"])
 
 	# Manual changes -------------------------------------------------------------------------
 
 	def test_a_moderator_sets_a_level_with_a_reason_and_it_goes_in_history(self):
 		self.turn_on()
 		with self.as_user(self.second_member):
-			result = set_member_level(self.community.name, self.member.name, "Trusted", "Long-time contributor")
+			result = set_member_level(
+				self.community.name, self.member.name, "Trusted", "Long-time contributor"
+			)
 		self.assertEqual(result["level"], "Trusted")
 		self.assertEqual(self.row().level, "Trusted")
 		log = self.level_logs("Level Changed")[0]
-		self.assertEqual((log.previous_level, log.level, log.reason), ("New", "Trusted", "Long-time contributor"))
-		self.assertTrue(frappe.db.exists("GP Notification", {"to_user": self.member.name, "type": "Trust Level"}))
+		self.assertEqual(
+			(log.previous_level, log.level, log.reason), ("New", "Trusted", "Long-time contributor")
+		)
+		self.assertTrue(
+			frappe.db.exists("GP Notification", {"to_user": self.member.name, "type": "Trust Level"})
+		)
 
 	def test_lowering_a_level_records_it_and_tells_nobody(self):
 		self.turn_on()
@@ -301,7 +309,8 @@ class TestTrustLevels(GameplanTestCase):
 	def test_staff_post_without_review_and_have_no_level_to_change(self):
 		self.turn_on()
 		with self.as_user(self.second_member):
-			self.assertEqual(my_level(self.community.name), {"enabled": 0})
+			self.assertFalse(needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name)))
+		self.assertIsNone(self.row(self.second_member))
 
 	def test_leaving_the_community_drops_a_manual_level_and_rejoining_works_it_out_again(self):
 		self.turn_on()
@@ -317,9 +326,9 @@ class TestTrustLevels(GameplanTestCase):
 		self.community.add_member(self.member.name)
 		self.community.save(ignore_permissions=True)
 		with self.as_user(self.member):
-			mine = my_level(self.community.name)
+			needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name))
 		# The three published posts still count (D39), but the manual Trusted level and the lock are gone.
-		self.assertEqual((mine["level"], mine["locked"]), ("Member", 0))
+		self.assertEqual((self.row().level, self.row().locked), ("Member", 0))
 
 	def test_trusted_members_skip_the_content_caps_and_members_do_not(self):
 		with self.as_user(self.admin):
@@ -334,28 +343,8 @@ class TestTrustLevels(GameplanTestCase):
 		with self.as_user(self.second_member):
 			set_member_level(self.community.name, self.member.name, "Trusted", "Long-time contributor")
 		with self.as_user(self.member):
-			frappe.get_doc(doctype="GP Discussion", project=self.space.name, title="Links", content=links).insert()
+			frappe.get_doc(
+				doctype="GP Discussion", project=self.space.name, title="Links", content=links
+			).insert()
 
 	# Reading ---------------------------------------------------------------------------------
-
-	def test_the_member_sees_their_own_progress_and_other_members_see_nothing_of_it(self):
-		self.turn_on()
-		self.accept(1)
-		with self.as_user(self.member):
-			mine = my_level(self.community.name)
-		self.assertEqual((mine["level"], mine["accepted"]), ("New", 1))
-		self.assertFalse(mine["requirements"]["member"]["met"])
-		with self.as_user(self.outsider), self.assertRaises(frappe.PermissionError):
-			member_levels(self.community.name)
-
-	def test_moderators_page_through_members_and_filter_by_level(self):
-		self.turn_on()
-		self.accept(3)
-		with self.as_user(self.second_member):
-			everyone = member_levels(self.community.name)
-			members = member_levels(self.community.name, level="Member")
-			new = member_levels(self.community.name, level="New")
-		by_user = {item["user"]: item["level"] for item in everyone["members"]}
-		self.assertEqual(by_user[self.member.name], "Member")
-		self.assertEqual([item["user"] for item in members["members"]], [self.member.name])
-		self.assertNotIn(self.member.name, [item["user"] for item in new["members"]])

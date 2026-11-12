@@ -11,12 +11,17 @@ from frappe.query_builder import functions as fn
 from frappe.utils import add_days, cint, get_datetime
 
 from gameplan.community_bans import can_moderate_community, is_banned
-from gameplan.paging import page_start
 from gameplan.permissions import require_can_manage_community
 from gameplan.restrictions import utc_now
 
 LEVELS = ("New", "Member", "Trusted")
-SETTING_FIELDS = ("trust_levels_enabled", "approval_post_count", "trust_trusted_count", "trust_trusted_days", "trust_clean_days")
+SETTING_FIELDS = (
+	"trust_levels_enabled",
+	"approval_post_count",
+	"trust_trusted_count",
+	"trust_trusted_days",
+	"trust_clean_days",
+)
 LEVEL_ACTIONS = ("Level Changed", "Level Locked", "Level Unlocked", "Trusted Promotion")
 PAGE = 50
 JOB_BATCH = 500
@@ -72,30 +77,37 @@ def higher(current, other):
 
 
 def days_as_member(community, user, now=None):
-	joined = frappe.db.get_value("GP Member", {"parent": str(community), "parenttype": "GP Team", "user": user}, "creation")
+	joined = frappe.db.get_value(
+		"GP Member", {"parent": str(community), "parenttype": "GP Team", "user": user}, "creation"
+	)
 	if not joined:
 		return 0
 	return max(0, (get_datetime(now or utc_now()) - get_datetime(joined)).days)
 
 
 def last_unclean_event(community, user, now=None):
-	"""When a post of this member was last hidden or spam-removed, a report on one was upheld, or they were banned.
+	"""When this member last had a post hidden or spam-removed, a report upheld, or a ban.
 
 	Only used the first time a member's level is worked out; moderation actions keep it current.
 	"""
 	community, user = str(community), str(user)
 	cutoff = add_days(now or utc_now(), -max(1, settings(community).clean_days))
 	Project, Discussion, Comment, Review, Log = (
-		frappe.qb.DocType(dt) for dt in ("GP Project", "GP Discussion", "GP Comment", "GP Review", "GP Moderation Log")
+		frappe.qb.DocType(dt)
+		for dt in ("GP Project", "GP Discussion", "GP Comment", "GP Review", "GP Moderation Log")
 	)
 	times = []
 	spaces = frappe.qb.from_(Project).select(Project.name).where(Project.team == community)
-	discussions = frappe.qb.from_(Discussion).where(Discussion.project.isin(spaces)).where(Discussion.owner == user)
+	discussions = (
+		frappe.qb.from_(Discussion).where(Discussion.project.isin(spaces)).where(Discussion.owner == user)
+	)
 	for column in (Discussion.hidden_at, Discussion.spam_removed_at):
 		times += discussions.select(fn.Max(column)).where(column > cutoff).run(pluck=True)
 	in_community = frappe.qb.from_(Discussion).select(Discussion.name).where(Discussion.project.isin(spaces))
 	comments = frappe.qb.from_(Comment).where(
-		(Comment.owner == user) & (Comment.reference_doctype == "GP Discussion") & Comment.reference_name.isin(in_community)
+		(Comment.owner == user)
+		& (Comment.reference_doctype == "GP Discussion")
+		& Comment.reference_name.isin(in_community)
 	)
 	for column in (Comment.hidden_at, Comment.spam_removed_at):
 		times += comments.select(fn.Max(column)).where(column > cutoff).run(pluck=True)
@@ -110,7 +122,12 @@ def last_unclean_event(community, user, now=None):
 	times += (
 		frappe.qb.from_(Log)
 		.select(fn.Max(Log.creation))
-		.where((Log.community == community) & (Log.user == user) & (Log.action == "Ban") & (Log.creation > cutoff))
+		.where(
+			(Log.community == community)
+			& (Log.user == user)
+			& (Log.action == "Ban")
+			& (Log.creation > cutoff)
+		)
 		.run(pluck=True)
 	)
 	times = [t for t in times if t]
@@ -204,7 +221,10 @@ def get_settings(community: str):
 	"""Return the trust level switch and thresholds to Community admins."""
 	require_can_manage_community(community)
 	config = settings(community)
-	return {**config, "defaults": {"member_count": 3, "trusted_count": 25, "trusted_days": 30, "clean_days": 90}}
+	return {
+		**config,
+		"defaults": {"member_count": 3, "trusted_count": 25, "trusted_days": 30, "clean_days": 90},
+	}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -233,7 +253,11 @@ def save_settings(community: str, enabled: int, trusted_count: int, trusted_days
 		# Every row is worked out again the next time it is read. Stored levels are kept: a
 		# level only goes up by rule.
 		frappe.db.set_value(
-			"GP Approval Counter", {"community": community, "locked": 0}, "level_changed_at", None, update_modified=False
+			"GP Approval Counter",
+			{"community": community, "locked": 0},
+			"level_changed_at",
+			None,
+			update_modified=False,
 		)
 		frappe.enqueue(backfill, queue="long", enqueue_after_commit=True, community=community)
 	return settings(community)
@@ -300,154 +324,59 @@ def set_member_lock(community: str, user: str, locked: int, reason: str):
 	return {"level": row.level, "locked": locked}
 
 
-# Reading -------------------------------------------------------------------------------------
-
-
-def requirements(config, accepted, days, clean):
-	"""Each requirement for the next level as met or not, shown to staff and to the member."""
-	return {
-		"member": {"needs": config.member_count, "have": accepted, "met": accepted >= config.member_count},
-		"trusted": {
-			"contributions": {"needs": config.trusted_count, "have": accepted, "met": accepted >= config.trusted_count},
-			"days": {"needs": config.trusted_days, "have": days, "met": days >= config.trusted_days},
-			"clean": {"needs": config.clean_days, "met": clean},
-		},
-	}
-
-
-def describe(user, row, config, joined=None):
-	days = max(0, (get_datetime(utc_now()) - get_datetime(joined)).days) if joined else 0
-	unclean = row.get("last_unclean_at")
-	clean = not unclean or get_datetime(unclean) <= add_days(utc_now(), -config.clean_days)
-	return {
-		"user": user,
-		"level": row.get("level") or "New",
-		"locked": cint(row.get("locked")),
-		"accepted": cint(row.get("accepted")),
-		"level_changed_at": row.get("level_changed_at"),
-		"requirements": requirements(config, cint(row.get("accepted")), days, clean),
-	}
-
-
-@frappe.whitelist(methods=["POST"])
-def my_level(community: str):
-	"""Return the caller's own level in a Community and what is left for the next one."""
-	import gameplan
-
-	user = frappe.session.user
-	if gameplan.is_anonymous(user):
-		frappe.throw(_("Sign in to see your level"), frappe.PermissionError)
-	config = settings(community)
-	if not config.enabled or can_moderate_community(community):
-		return {"enabled": 0}
-	row = target_row(community, user)
-	evaluate(community, user, row, config)
-	joined = frappe.db.get_value("GP Member", {"parent": str(community), "parenttype": "GP Team", "user": user}, "creation")
-	return {"enabled": 1, **describe(user, row, config, joined)}
-
-
-@frappe.whitelist(methods=["GET", "POST"])
-def member_levels(community: str, level: str = "", start: int = 0):
-	"""List a Community's members with their stored levels, 50 at a time. Community moderators and admins.
-
-	Reads only. A member the background job has not reached yet shows as New with `pending` set.
-	"""
-	if not can_moderate_community(community):
-		frappe.throw(_("Only Community moderators can see levels"), frappe.PermissionError)
-	if level and level not in LEVELS:
-		frappe.throw(_("Choose New, Member or Trusted"))
-	config = settings(community)
-	Member, Counter, User = (frappe.qb.DocType(dt) for dt in ("GP Member", "GP Approval Counter", "User"))
-	query = (
-		frappe.qb.from_(Member)
-		.left_join(Counter)
-		.on((Counter.community == Member.parent) & (Counter.user == Member.user))
-		.join(User)
-		.on(User.name == Member.user)
-		.select(
-			Member.user,
-			Member.creation.as_("joined"),
-			User.full_name,
-			Counter.name.as_("counter"),
-			Counter.level,
-			Counter.locked,
-			Counter.accepted,
-			Counter.level_changed_at,
-			Counter.last_unclean_at,
-		)
-		.where((Member.parent == str(community)) & (Member.parenttype == "GP Team") & (Member.is_admin == 0))
-		.where(Member.is_moderator == 0)
-	)
-	if level == "New":
-		query = query.where(Counter.level.isnull() | (Counter.level == "New"))
-	elif level:
-		query = query.where(Counter.level == level)
-	rows = query.orderby(Member.creation, order=frappe.qb.desc).limit(PAGE + 1).offset(page_start(start)).run(as_dict=True)
-	members = [
-		{
-			**describe(item.user, item, config, item.joined),
-			"full_name": item.full_name,
-			"pending": int(not item.counter or not item.level_changed_at),
-		}
-		for item in rows[:PAGE]
-	]
-	return {"members": members, "more": len(rows) > PAGE}
-
-
 # Nightly job ---------------------------------------------------------------------------------
 
 
-def promote_trusted(after="", budget=TIME_BUDGET):
-	"""Promote members who now meet every Trusted requirement. Runs daily.
+def promote_trusted():
+	"""Daily: queue one job per Community that uses trust levels, to promote members to Trusted."""
+	for community in frappe.get_all("GP Team", filters={"trust_levels_enabled": 1}, pluck="name"):
+		frappe.enqueue(promote_community, queue="long", community=str(community), now=frappe.in_test)
 
-	Only rows with enough accepted contributions are read, in pages, and a long run continues
-	as a new job like the digest does.
+
+def promote_community(community, after="", budget=TIME_BUDGET):
+	"""Promote the members of one Community who now meet every Trusted requirement.
+
+	Reads only rows with enough accepted contributions, through the trust_candidates index.
 	"""
-	started = clock()
-	for community in frappe.get_all("GP Team", filters={"trust_levels_enabled": 1}, pluck="name", order_by="name asc"):
-		if after and str(community) < after.split("|")[0]:
-			continue
-		cursor = after.split("|")[1] if after and str(community) == after.split("|")[0] else ""
-		config = settings(community)
-		while True:
-			names = frappe.get_all(
-				"GP Approval Counter",
-				filters=[
-					["community", "=", str(community)],
-					["locked", "=", 0],
-					["level", "!=", "Trusted"],
-					["accepted", ">=", config.trusted_count],
-					["name", ">", cursor],
-				],
-				pluck="name",
-				order_by="name asc",
-				limit=JOB_BATCH,
-			)
-			if not names:
-				break
-			for number, name in enumerate(names, 1):
-				cursor = name
-				promote_row(community, name, config)
-				if number % COMMIT_EVERY == 0:
-					frappe.db.commit()  # nosemgrep
-				if clock() - started > budget:
-					frappe.db.commit()  # nosemgrep
-					frappe.enqueue(
-						promote_trusted, queue="long", after=f"{community}|{cursor}", budget=CONTINUATION_BUDGET
-					)
-					return
-			frappe.db.commit()  # nosemgrep
-		after = ""
+	config = settings(community)
+	if not config.enabled:
+		return
+
+	def candidates(after):
+		return frappe.get_all(
+			"GP Approval Counter",
+			filters=[
+				["community", "=", str(community)],
+				["locked", "=", 0],
+				["level", "!=", "Trusted"],
+				["accepted", ">=", config.trusted_count],
+				["name", ">", after],
+			],
+			pluck="name",
+			order_by="name asc",
+			limit=JOB_BATCH,
+		)
+
+	in_slices(
+		candidates,
+		lambda name: promote_row(community, name, config),
+		lambda after: frappe.enqueue(
+			promote_community, queue="long", community=community, after=after, budget=CONTINUATION_BUDGET
+		),
+		after,
+		budget,
+	)
 
 
 def promote_row(community, name, config):
-	row = frappe.db.get_value("GP Approval Counter", name, ["name", "user", "accepted", "level", "locked", "last_unclean_at"], as_dict=True)
+	fields = ["name", "user", "accepted", "level", "locked", "last_unclean_at"]
+	row = frappe.db.get_value("GP Approval Counter", name, fields, as_dict=True)
 	if not row or row.locked or can_moderate_community(community, row.user) or is_banned(community, row.user):
 		return
 	level = target_level(config, cint(row.accepted), days_as_member(community, row.user), row.last_unclean_at)
-	if LEVELS.index(level) <= LEVELS.index(row.level or "New"):
-		return
 	previous = row.level or "New"
+	if LEVELS.index(level) <= LEVELS.index(previous):
+		return
 	apply_level(community, row.user, row, level)
 	if level == "Trusted":
 		log_level(community, row.user, "Trusted Promotion", "", previous, level)
@@ -456,31 +385,47 @@ def promote_row(community, name, config):
 def backfill(community, after="", budget=TIME_BUDGET):
 	"""Work out every member's level from their existing contributions after the switch goes on (D74).
 
-	Chunked and resumable: a long run continues as a new job from the last member it handled.
 	Nobody is told, and staff are skipped. Until it finishes, rows are worked out as they are read.
 	"""
-	started = clock()
 	config = settings(community)
 	if not config.enabled:
 		return
-	while True:
-		users = frappe.get_all(
-			"GP Member",
-			filters={"parent": str(community), "parenttype": "GP Team", "user": [">", after]},
-			pluck="user",
-			order_by="user asc",
-			limit=JOB_BATCH,
+
+	def members(after):
+		filters = {"parent": str(community), "parenttype": "GP Team", "user": [">", after]}
+		return frappe.get_all(
+			"GP Member", filters=filters, pluck="user", order_by="user asc", limit=JOB_BATCH
 		)
-		if not users:
-			return
-		for number, user in enumerate(users, 1):
-			after = user
-			if not can_moderate_community(community, user):
-				evaluate(community, user, target_row(community, user), config)
+
+	def work_out(user):
+		if not can_moderate_community(community, user):
+			evaluate(community, user, target_row(community, user), config)
+
+	in_slices(
+		members,
+		work_out,
+		lambda after: frappe.enqueue(
+			backfill, queue="long", community=str(community), after=after, budget=CONTINUATION_BUDGET
+		),
+		after,
+		budget,
+	)
+
+
+def in_slices(fetch, handle, resume, after, budget):
+	"""Handle each key `fetch(after)` returns, a page at a time, committing as it goes.
+
+	After `budget` seconds it commits, calls `resume(last key)` to queue the rest as a new job, and stops.
+	"""
+	started = clock()
+	while keys := fetch(after):
+		for number, key in enumerate(keys, 1):
+			after = key
+			handle(key)
 			if number % COMMIT_EVERY == 0:
 				frappe.db.commit()  # nosemgrep
 			if clock() - started > budget:
 				frappe.db.commit()  # nosemgrep
-				frappe.enqueue(backfill, queue="long", community=str(community), after=after, budget=CONTINUATION_BUDGET)
+				resume(after)
 				return
 		frappe.db.commit()  # nosemgrep
