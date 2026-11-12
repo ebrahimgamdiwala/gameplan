@@ -1,5 +1,5 @@
 <template>
-  <section v-if="levels.length" class="mt-5" data-testid="my-trust-levels">
+  <section v-if="levels.length" class="mb-5 mt-5" data-testid="my-trust-levels">
     <h2 class="text-base font-medium text-ink-gray-9">Your level</h2>
     <div class="mt-2 divide-y divide-outline-gray-1 rounded-5 border border-outline-gray-1">
       <div v-for="item in levels" :key="item.community" class="px-4 py-3">
