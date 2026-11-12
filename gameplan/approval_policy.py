@@ -124,7 +124,13 @@ def counter(community, user=None):
 	row = frappe.get_doc(doctype="GP Approval Counter", community=community, user=user, accepted=accepted)
 	row.insert(ignore_permissions=True)
 	return frappe._dict(
-		name=row.name, user=user, accepted=accepted, level="New", locked=0, level_changed_at=None, last_unclean_at=None
+		name=row.name,
+		user=user,
+		accepted=accepted,
+		level="New",
+		locked=0,
+		level_changed_at=None,
+		last_unclean_at=None,
 	)
 
 

@@ -10,9 +10,8 @@ from gameplan.posting_limits import save_settings as save_caps
 from gameplan.restrictions import utc_now
 from gameplan.tests.base import GameplanTestCase
 from gameplan.tests.fixtures import create_community, create_discussion, create_space
-from gameplan.trust_levels import backfill
-from gameplan.trust_levels import promote_trusted as run_promote_trusted
 from gameplan.trust_levels import (
+	backfill,
 	member_levels,
 	my_level,
 	my_levels,
@@ -22,6 +21,7 @@ from gameplan.trust_levels import (
 	settings,
 	target_level,
 )
+from gameplan.trust_levels import promote_trusted as run_promote_trusted
 
 
 def config(**values):
@@ -86,7 +86,7 @@ class TestTrustLevels(GameplanTestCase):
 			)
 
 	def accept(self, count):
-		"""Get `count` contributions accepted: approved from the queue, or published directly once a Member."""
+		"""Get `count` contributions accepted: approved from the queue, or published once a Member."""
 		for _ in range(count):
 			result = self.submit()
 			if result.get("status") != "Pending":
@@ -95,10 +95,10 @@ class TestTrustLevels(GameplanTestCase):
 				row = detail(result["name"])
 				decide(result["name"], "Approve", str(row.modified), "")
 
-	def promote_trusted(self, **kwargs):
+	def promote_trusted(self):
 		# The job commits as it goes; a test must not keep its data.
 		with patch("frappe.db.commit"):
-			run_promote_trusted(**kwargs)
+			run_promote_trusted()
 
 	def level_logs(self, action):
 		return frappe.get_all(
@@ -135,7 +135,7 @@ class TestTrustLevels(GameplanTestCase):
 		self.turn_on(enabled=0)
 		self.turn_on()
 		with self.as_user(self.member):
-			my_level(self.community.name)
+			needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name))
 		self.assertEqual(self.row().level, "Member")
 
 	def test_the_backfill_works_out_every_member_silently_and_skips_staff(self):
@@ -156,22 +156,6 @@ class TestTrustLevels(GameplanTestCase):
 		enqueue.assert_called_once()
 		self.assertEqual(enqueue.call_args.kwargs["community"], str(self.community.name))
 		self.assertTrue(enqueue.call_args.kwargs["after"])
-
-	def test_the_member_list_only_reads_and_marks_members_the_job_has_not_reached(self):
-		for index in range(3):
-			create_discussion(f"Existing {index}", self.space, owner=self.member)
-		self.turn_on()
-		with self.as_user(self.second_member):
-			before = {item["user"]: item for item in member_levels(self.community.name)["members"]}
-		self.assertEqual((before[self.member.name]["level"], before[self.member.name]["pending"]), ("New", 1))
-		self.assertIsNone(self.row())
-		with patch("frappe.db.commit"):
-			backfill(self.community.name)
-		with self.as_user(self.second_member):
-			after = {item["user"]: item for item in member_levels(self.community.name)["members"]}
-		self.assertEqual(
-			(after[self.member.name]["level"], after[self.member.name]["pending"]), ("Member", 0)
-		)
 
 	# Promotion ------------------------------------------------------------------------------
 
@@ -258,12 +242,15 @@ class TestTrustLevels(GameplanTestCase):
 		self.assertEqual(self.row().level, "Member")
 
 	def test_the_nightly_job_continues_in_a_new_job_after_its_time_budget(self):
+		from gameplan.trust_levels import promote_community
+
 		self.turn_on()
 		self.accept(4)
-		with patch("frappe.enqueue") as enqueue:
-			self.promote_trusted(budget=-1)
+		with patch("frappe.db.commit"), patch("frappe.enqueue") as enqueue:
+			promote_community(self.community.name, budget=-1)
 		enqueue.assert_called_once()
-		self.assertTrue(enqueue.call_args.kwargs["after"].startswith(f"{self.community.name}|"))
+		self.assertEqual(enqueue.call_args.kwargs["community"], self.community.name)
+		self.assertTrue(enqueue.call_args.kwargs["after"])
 
 	# Manual changes -------------------------------------------------------------------------
 
@@ -325,7 +312,8 @@ class TestTrustLevels(GameplanTestCase):
 	def test_staff_post_without_review_and_have_no_level_to_change(self):
 		self.turn_on()
 		with self.as_user(self.second_member):
-			self.assertEqual(my_level(self.community.name), {"enabled": 0})
+			self.assertFalse(needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name)))
+		self.assertIsNone(self.row(self.second_member))
 
 	def test_leaving_the_community_drops_a_manual_level_and_rejoining_works_it_out_again(self):
 		self.turn_on()
@@ -341,9 +329,9 @@ class TestTrustLevels(GameplanTestCase):
 		self.community.add_member(self.member.name)
 		self.community.save(ignore_permissions=True)
 		with self.as_user(self.member):
-			mine = my_level(self.community.name)
+			needs_approval(frappe._dict(doctype="GP Discussion", project=self.space.name))
 		# The three published posts still count (D39), but the manual Trusted level and the lock are gone.
-		self.assertEqual((mine["level"], mine["locked"]), ("Member", 0))
+		self.assertEqual((self.row().level, self.row().locked), ("Member", 0))
 
 	def test_trusted_members_skip_the_content_caps_and_members_do_not(self):
 		with self.as_user(self.admin):
@@ -363,6 +351,22 @@ class TestTrustLevels(GameplanTestCase):
 			).insert()
 
 	# Reading ---------------------------------------------------------------------------------
+
+	def test_the_member_list_only_reads_and_marks_members_the_job_has_not_reached(self):
+		for index in range(3):
+			create_discussion(f"Existing {index}", self.space, owner=self.member)
+		self.turn_on()
+		with self.as_user(self.second_member):
+			before = {item["user"]: item for item in member_levels(self.community.name)["members"]}
+		self.assertEqual((before[self.member.name]["level"], before[self.member.name]["pending"]), ("New", 1))
+		self.assertIsNone(self.row())
+		with patch("frappe.db.commit"):
+			backfill(self.community.name)
+		with self.as_user(self.second_member):
+			after = {item["user"]: item for item in member_levels(self.community.name)["members"]}
+		self.assertEqual(
+			(after[self.member.name]["level"], after[self.member.name]["pending"]), ("Member", 0)
+		)
 
 	def test_the_member_sees_their_own_progress_and_other_members_see_nothing_of_it(self):
 		self.turn_on()
