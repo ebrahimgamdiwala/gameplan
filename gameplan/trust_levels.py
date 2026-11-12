@@ -1,6 +1,6 @@
 """Site-wide trust levels that mirror Discourse: New, Basic, Member, Regular and Leader.
 
-Decisions D103 to D131. A member earns Basic and Member from visits, discussions entered,
+Decisions D103 to D132. A member earns Basic and Member from visits, discussions entered,
 reactions and replies, Regular from the same signals over a rolling window, and Leader only by
 hand. Levels are stored on GP Trust Level, one row a person, so the posting path reads one row
 by primary key. Requirements are checked once a day per member, when a post is accepted, and

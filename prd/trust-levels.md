@@ -1,6 +1,6 @@
 # Trust levels
 
-Decisions D103 to D131 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
+Decisions D103 to D132 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
 
 Trust levels mirror Discourse. Each person has one site-wide level. Members earn the first three levels from what they do, keep Regular only while they stay active, and get Leader only by hand. Levels are off until a global admin turns them on.
 
@@ -12,7 +12,7 @@ Trust levels mirror Discourse. Each person has one site-wide level. Members earn
 | 1 Basic | 5 discussions entered, visits on 2 days, 1 accepted post | The new-user limits end. The site content caps apply. | 1 |
 | 2 Member | Visits on 15 days, 1 reaction given, 1 received, replies in 3 discussions, 20 discussions entered | Twice the posting-rate limits | 2 |
 | 3 Regular | In the last 100 days: visits on 50 days, replies in 10 discussions, 25% of new discussions entered (at most 500), 30 reactions given, 20 received from at least 5 people, at most 5 posts removed by moderators. No ban, suspension, or silence in the last 180 days. | Skips the content caps | 3 |
-| 4 Leader | A global admin only | See "Open question" | 3 |
+| 4 Leader | A global admin only | Nothing beyond report weight (D132) | 3 |
 
 Global admins edit every number in Site administration. Each has a fixed range.
 
@@ -73,6 +73,6 @@ Members get an in-app notification for each promotion, and when they drop from R
 - `gameplan.trust_levels.set_level` and `set_lock`: manual changes, for global admins.
 - `gameplan.approval_policy.get_level_policy` and `set_level_policy`: a Community's approval level, for its admins.
 
-## Open question
+## Leader
 
-In Gameplan, every member who can see a Space can already edit, close, reopen, pin, and move discussions in it (`can_edit_content`). Leader (D116, D128) therefore unlocks nothing new until that rule changes.
+Every member who can see a Space can already edit, close, reopen, pin, and move its discussions (`can_edit_content`). That rule stays, so Leader carries only report weight 3 (D132).

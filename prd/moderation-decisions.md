@@ -141,6 +141,7 @@ A recommendation becomes a decision only after Ebrahim accepts it.
 | D129 | A member who drops from Regular to Member gets a notification. | Supersedes D73's "no notice when a level is lowered" for this case. |
 | D130 | A manual change to Regular also starts the grace period. A lock keeps a level for good. | |
 | D131 | The trust level engine and visit tracking are PR 12. The UI is PR 13. Weighted auto-hide is PR 14. Each is one PR whatever its size. | Supersedes D77. |
+| D132 | Leader unlocks nothing beyond report weight 3. Every member who can see a Space keeps editing, closing, reopening, pinning, and moving its discussions. | Supersedes D116's Leader actions and D128. Confirmed November 12, 2026. |
 
 
 
@@ -203,7 +204,7 @@ Plan these when their implementation slice is next. Roadmap recommendations do n
 - The later enhancements in the roadmap: automatic silencing, AI spam detection, advanced regex rules, and assigning or claiming review items.
 - Migration from Discourse (deferred by D02).
 
-Trust levels were settled on November 6, 2026 (D62 to D77) and redesigned to mirror Discourse on November 12, 2026 (D103 to D131). The spec is `prd/trust-levels.md`. Weighted auto-hide was settled on November 12, 2026 (D78 to D102).
+Trust levels were settled on November 6, 2026 (D62 to D77) and redesigned to mirror Discourse on November 12, 2026 (D103 to D132). The spec is `prd/trust-levels.md`. Weighted auto-hide was settled on November 12, 2026 (D78 to D102).
 
 Silence, flood limits, automatic slow-mode expiry, and author-wide cleanup with undo were settled on November 4 and 5, 2026. See the sections below.
 
