@@ -4,7 +4,10 @@
     visits, discussions entered, reactions and replies. Change or lock a level by hand.
   </p>
   <div class="flex flex-wrap items-center justify-between gap-3 pb-3">
-    <TabButtons v-model="filter" :options="filters" />
+    <!-- Seven filters are wider than a phone, so the strip scrolls on its own. -->
+    <div class="max-w-full overflow-x-auto">
+      <TabButtons v-model="filter" :options="filters" />
+    </div>
     <div class="flex items-center gap-2">
       <TextInput
         v-model="query"
