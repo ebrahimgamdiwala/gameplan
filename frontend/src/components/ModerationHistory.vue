@@ -84,9 +84,7 @@
           <p class="text-p-sm text-ink-gray-5">
             by
             {{
-              ['Restriction Expired', 'Slow Mode Expired', 'Trusted Promotion'].includes(
-                item.action,
-              )
+              ['Restriction Expired', 'Slow Mode Expired'].includes(item.action)
                 ? 'System'
                 : useUser(item.owner).full_name
             }}
@@ -178,8 +176,6 @@ type HistoryItem = {
   title?: string
   cleanup?: string
   undone?: boolean
-  previous_level?: string
-  level?: string
 }
 const items = ref<HistoryItem[]>([])
 function targetLabel(item: HistoryItem) {
@@ -215,10 +211,6 @@ const icons: Record<string, string> = {
   'Slow Mode Expired': 'lucide-clock',
   'Author Cleanup': 'lucide-eraser',
   'Undo Cleanup': 'lucide-undo-2',
-  'Level Changed': 'lucide-award',
-  'Level Locked': 'lucide-lock',
-  'Level Unlocked': 'lucide-lock-open',
-  'Trusted Promotion': 'lucide-award',
 }
 const actionIcon = (action: string) => icons[action] || 'lucide-shield'
 function detailLine(item: HistoryItem) {
@@ -231,9 +223,6 @@ function detailLine(item: HistoryItem) {
   if (['Ban', 'Ban Changed', 'Unban', 'Restriction Expired'].includes(item.action))
     return restrictionTransition(item)
   if (['Author Cleanup', 'Undo Cleanup'].includes(item.action)) return item.title || 'In progress'
-  if (['Level Changed', 'Trusted Promotion'].includes(item.action))
-    return `${item.previous_level || 'New'} → ${item.level}`
-  if (['Level Locked', 'Level Unlocked'].includes(item.action)) return `Level ${item.level}`
   return ''
 }
 function applyKind() {

@@ -4,7 +4,6 @@ from frappe.query_builder import Criterion
 from gameplan.community_bans import can_moderate_community
 from gameplan.paging import page_start
 from gameplan.permissions import moderatable_project_names
-from gameplan.trust_levels import LEVEL_ACTIONS
 
 BAN_HISTORY_USER_PAGE_SIZE = 20
 
@@ -26,7 +25,7 @@ def ban_users(community: str, query: str = "", after: str = ""):
 		.select(Log.user)
 		.where(
 			(Log.community == community)
-			& Log.action.isin(["Ban", "Unban", "Ban Changed", "Restriction Expired", *LEVEL_ACTIONS])
+			& Log.action.isin(["Ban", "Unban", "Ban Changed", "Restriction Expired"])
 		)
 	)
 	users = (
@@ -82,15 +81,7 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 		"user": (
 			(Log.community == community)
 			& Log.action.isin(
-				[
-					"Ban",
-					"Unban",
-					"Ban Changed",
-					"Restriction Expired",
-					"Author Cleanup",
-					"Undo Cleanup",
-					*LEVEL_ACTIONS,
-				]
+				["Ban", "Unban", "Ban Changed", "Restriction Expired", "Author Cleanup", "Undo Cleanup"]
 			),
 			Log.user,
 		),
@@ -119,8 +110,6 @@ def history(community: str, kind: str = "all", target: str = "", start: int = 0)
 			Log.expires_at,
 			Log.title,
 			Log.cleanup,
-			Log.previous_level,
-			Log.level,
 		)
 		.where(criterion)
 		.orderby(Log.creation, order=frappe.qb.desc)

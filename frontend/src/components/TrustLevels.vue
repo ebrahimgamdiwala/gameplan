@@ -1,9 +1,22 @@
 <template>
+  <p class="pb-5 text-p-base text-ink-gray-6">
+    Every member has one level across the site. Members earn New, Basic, Member and Regular from
+    visits, discussions entered, reactions and replies. Change or lock a level by hand.
+  </p>
   <div class="flex flex-wrap items-center justify-between gap-3 pb-3">
     <TabButtons v-model="filter" :options="filters" />
-    <p v-if="enabled && members.length" class="text-p-sm text-ink-gray-6">
-      {{ members.length }}{{ more ? '+' : '' }} shown
-    </p>
+    <div class="flex items-center gap-2">
+      <TextInput
+        v-model="query"
+        class="w-48"
+        placeholder="Search by name"
+        type="search"
+        aria-label="Search by name"
+      >
+        <template #prefix><span class="lucide-search size-4" aria-hidden="true" /></template>
+      </TextInput>
+      <TrustLevelSettings @saved="load" />
+    </div>
   </div>
   <ErrorMessage
     v-if="error"
@@ -14,11 +27,7 @@
     v-if="!loading && !error && !enabled"
     icon="lucide-award"
     title="Trust levels are off"
-    :description="
-      canManage
-        ? 'Turn them on under Approval settings on the Approvals tab.'
-        : 'A Community admin can turn them on.'
-    "
+    description="Turn them on under Trust level settings."
   />
   <template v-else-if="members.length">
     <div class="border-t border-outline-gray-1" data-testid="trust-level-list">
@@ -27,14 +36,14 @@
           <template #lead>
             <Avatar
               :image="useUser(member.user).user_image"
-              :label="member.full_name || useUser(member.user).full_name"
+              :label="member.full_name || member.user"
               size="md"
             />
           </template>
-          <template #title>{{ member.full_name || useUser(member.user).full_name }}</template>
-          <template #meta>{{ summary(member) }}</template>
+          <template #title>{{ member.full_name || member.user }}</template>
+          <template #meta>{{ meta(member) }}</template>
           <template #status>
-            <Badge :label="member.level" />
+            <Badge :label="LEVEL_NAMES[member.level]" />
             <Badge v-if="member.locked" label="Locked" />
           </template>
           <template #actions>
@@ -46,20 +55,12 @@
                 {
                   label: expanded === member.user ? 'Hide requirements' : 'Show requirements',
                   icon: 'lucide-list-checks',
-                  onClick: () => (expanded = expanded === member.user ? '' : member.user),
+                  onClick: () => toggle(member),
                 },
                 {
                   label: member.locked ? 'Unlock level' : 'Lock level',
                   icon: member.locked ? 'lucide-lock-open' : 'lucide-lock',
                   onClick: () => openDialog(member, 'lock'),
-                },
-                {
-                  label: 'View history',
-                  icon: 'lucide-history',
-                  onClick: () =>
-                    router.push({
-                      query: { ...route.query, tab: 'history', kind: 'user', target: member.user },
-                    }),
                 },
               ]"
             />
@@ -70,33 +71,9 @@
           class="mb-3 ml-10 rounded-5 bg-surface-gray-1 p-4"
           data-testid="trust-requirements"
         >
-          <p class="text-p-sm text-ink-gray-7">{{ levelDescriptions[member.level] }}</p>
-          <p v-if="member.pending" class="mt-2 text-p-sm text-ink-gray-6">
-            The background job has not reached this member yet. Their level is worked out the next
-            time they post.
-          </p>
-          <ul
-            v-else-if="nextSteps(member.level, member.requirements).length"
-            class="mt-3 space-y-1.5"
-          >
-            <li
-              v-for="step in nextSteps(member.level, member.requirements)"
-              :key="step.label"
-              class="flex items-start gap-2 text-p-sm text-ink-gray-7"
-            >
-              <span
-                :class="[
-                  step.met
-                    ? 'lucide-circle-check text-ink-gray-7'
-                    : 'lucide-circle text-ink-gray-4',
-                  'mt-0.5 size-4 shrink-0',
-                ]"
-                aria-hidden="true"
-              />
-              <span>{{ step.met ? 'Met' : 'Not met' }}: {{ step.label }}</span>
-            </li>
-          </ul>
-          <p v-else class="mt-2 text-p-sm text-ink-gray-6">This is the highest level.</p>
+          <p class="mb-3 text-p-sm text-ink-gray-7">{{ levelDescriptions[member.level] }}</p>
+          <TrustRequirements v-if="progress" :progress="progress" />
+          <p v-else role="status" class="text-p-sm text-ink-gray-5">Loading…</p>
         </div>
       </template>
     </div>
@@ -104,8 +81,8 @@
   <ModerationEmpty
     v-else-if="!loading && !error"
     icon="lucide-award"
-    :title="filter ? `No ${filter} members` : 'No members yet'"
-    description="Community staff are not listed: they have no level."
+    :title="query ? 'No one matches your search' : 'No one at this level'"
+    description="Global admins are not listed: they have no level."
   />
   <p v-if="loading" role="status" class="mt-4 text-base text-ink-gray-5">Loading…</p>
   <ModerationPager
@@ -119,38 +96,45 @@
     :key="`${target.user}-${mode}`"
     v-model:open="dialogOpen"
     :member="target"
-    :community="communityId"
     :mode="mode"
     @saved="load"
   />
 </template>
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Avatar, Badge, Button, Dropdown, ErrorMessage, TabButtons, call } from 'frappe-ui'
+import { ref, watch } from 'vue'
+import {
+  Avatar,
+  Badge,
+  Button,
+  Dropdown,
+  ErrorMessage,
+  TabButtons,
+  TextInput,
+  call,
+} from 'frappe-ui'
 import ModerationEmpty from '@/components/moderation/ModerationEmpty.vue'
 import ModerationPager from '@/components/moderation/ModerationPager.vue'
 import ModerationRow from '@/components/moderation/ModerationRow.vue'
 import TrustLevelDialog from '@/components/TrustLevelDialog.vue'
-import { useCommunity } from '@/data/communities'
-import { useSessionUser, useUser } from '@/data/users'
-import { levelDescriptions, nextSteps, summary, type MemberLevel } from '@/data/trustLevels'
-import { canManageCommunity } from '@/utils/permissions'
+import TrustLevelSettings from '@/components/TrustLevelSettings.vue'
+import TrustRequirements from '@/components/TrustRequirements.vue'
+import { useUser } from '@/data/users'
+import {
+  LEVEL_NAMES,
+  levelDescriptions,
+  type LevelProgress,
+  type MemberLevel,
+} from '@/data/trustLevels'
 import { extractServerMessage } from '@/utils'
 
 const PAGE = 50
-const props = defineProps<{ communityId: string }>()
-const route = useRoute()
-const router = useRouter()
-const community = useCommunity(() => props.communityId)
-const canManage = computed(() => canManageCommunity(community.value, useSessionUser()))
 const filters = [
   { label: 'All', value: '' },
-  { label: 'New', value: 'New' },
-  { label: 'Member', value: 'Member' },
-  { label: 'Trusted', value: 'Trusted' },
+  ...LEVEL_NAMES.map((name, index) => ({ label: name, value: String(index) })),
+  { label: 'Not worked out', value: 'pending' },
 ]
 const filter = ref('')
+const query = ref('')
 const start = ref(0)
 const members = ref<MemberLevel[]>([])
 const enabled = ref(true)
@@ -158,14 +142,38 @@ const more = ref(false)
 const loading = ref(false)
 const error = ref<unknown>(null)
 const expanded = ref('')
+const progress = ref<LevelProgress | null>(null)
 const target = ref<MemberLevel | null>(null)
 const mode = ref<'level' | 'lock'>('level')
 const dialogOpen = ref(false)
+
+function meta(member: MemberLevel) {
+  if (member.pending) return 'Not worked out yet. It is worked out when first needed.'
+  return member.user
+}
 
 function openDialog(member: MemberLevel, nextMode: 'level' | 'lock') {
   target.value = member
   mode.value = nextMode
   dialogOpen.value = true
+}
+
+async function toggle(member: MemberLevel) {
+  if (expanded.value === member.user) {
+    expanded.value = ''
+    return
+  }
+  expanded.value = member.user
+  progress.value = null
+  try {
+    const result = await call<LevelProgress>('gameplan.trust_levels.member_progress', {
+      user: member.user,
+    })
+    if (expanded.value === member.user) progress.value = result
+  } catch (e) {
+    error.value = e
+    expanded.value = ''
+  }
 }
 
 let request = 0
@@ -176,7 +184,7 @@ async function load() {
   try {
     const result = await call<{ enabled: number; members: MemberLevel[]; more: boolean }>(
       'gameplan.trust_levels.member_levels',
-      { community: props.communityId, level: filter.value, start: start.value },
+      { level: filter.value, query: query.value, start: start.value },
     )
     if (current !== request) return
     enabled.value = Boolean(result.enabled)
@@ -188,9 +196,17 @@ async function load() {
     if (current === request) loading.value = false
   }
 }
-watch([() => props.communityId, filter], () => {
+let typing: ReturnType<typeof setTimeout>
+watch(query, () => {
+  clearTimeout(typing)
+  typing = setTimeout(() => {
+    start.value = 0
+    load()
+  }, 300)
+})
+watch(filter, () => {
   start.value = 0
   expanded.value = ''
 })
-watch([() => props.communityId, filter, start], load, { immediate: true })
+watch([filter, start], load, { immediate: true })
 </script>

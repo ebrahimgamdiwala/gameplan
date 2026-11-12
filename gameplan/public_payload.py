@@ -123,10 +123,7 @@ PRIVATE_FIELDS = {
 	"GP Team": {
 		**VISIBILITY_PRIVATE_FIELDS,
 		"approval_post_count": "Community moderation policy, not public content",
-		"trust_levels_enabled": "Community moderation policy, not public content",
-		"trust_trusted_count": "Community moderation policy, not public content",
-		"trust_trusted_days": "Community moderation policy, not public content",
-		"trust_clean_days": "Community moderation policy, not public content",
+		"approval_min_level": "Community moderation policy, not public content",
 	},
 	"GP Project": {
 		**VISIBILITY_PRIVATE_FIELDS,

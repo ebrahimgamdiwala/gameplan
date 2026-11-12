@@ -1,27 +1,29 @@
 <template>
   <Dialog v-model:open="open" :title="title" :dismissible="!saving">
     <p class="mb-4 text-base text-ink-gray-6">
-      {{ member.full_name || member.user }} · currently {{ member.level }}
+      {{ member.full_name || member.user }} · currently {{ LEVEL_NAMES[member.level] }}
       <span v-if="member.locked"> (locked)</span>
     </p>
     <template v-if="mode === 'level'">
       <Select v-model="level" label="Level" :options="levelOptions" :disabled="saving" />
-      <p class="mt-2 text-p-sm text-ink-gray-6">{{ levelDescriptions[level] }}</p>
+      <p class="mt-2 text-p-sm text-ink-gray-6">
+        {{ levelDescriptions[Number(level) as LevelNumber] }}
+      </p>
       <p v-if="!member.locked" class="mt-2 text-p-sm text-ink-gray-6">
-        The rules can still raise this level later. Lock it to keep it as set.
+        The rules can still change this level later. Lock it to keep it as set.
       </p>
     </template>
     <p v-else class="text-p-sm text-ink-gray-6">
       {{
         member.locked
-          ? 'Unlocking lets the rules raise this level again as the member contributes.'
+          ? 'Unlocking lets the rules change this level again.'
           : 'Locking keeps this level as it is. The rules stop changing it until it is unlocked.'
       }}
     </p>
     <Textarea
       v-model="reason"
       class="mt-4"
-      label="Reason (seen by moderators only)"
+      label="Reason (seen by global admins only)"
       :maxlength="500"
       :disabled="saving"
       required
@@ -34,7 +36,7 @@
     <template #actions>
       <Button
         variant="solid"
-        :disabled="!reason.trim() || (mode === 'level' && level === member.level)"
+        :disabled="!reason.trim() || (mode === 'level' && Number(level) === member.level)"
         :loading="saving"
         @click="save"
         >{{ confirmLabel }}</Button
@@ -47,20 +49,23 @@ import { computed, ref } from 'vue'
 import { Button, Dialog, ErrorMessage, Select, Textarea, call, toast } from 'frappe-ui'
 import { extractServerMessage } from '@/utils'
 import {
-  TRUST_LEVELS,
+  LEVEL_NAMES,
   levelDescriptions,
+  type LevelNumber,
   type MemberLevel,
-  type TrustLevel,
 } from '@/data/trustLevels'
 
-const props = defineProps<{ member: MemberLevel; community: string; mode: 'level' | 'lock' }>()
+const props = defineProps<{ member: MemberLevel; mode: 'level' | 'lock' }>()
 const emit = defineEmits<{ saved: [] }>()
 const open = defineModel<boolean>('open', { default: false })
-const level = ref<TrustLevel>(props.member.level)
+const level = ref(String(props.member.level))
 const reason = ref('')
 const saving = ref(false)
 const error = ref<unknown>(null)
-const levelOptions = TRUST_LEVELS.map((value) => ({ label: value, value }))
+const levelOptions = LEVEL_NAMES.map((name, index) => ({
+  label: `${index} ${name}`,
+  value: String(index),
+}))
 const title = computed(() =>
   props.mode === 'level' ? 'Change level' : props.member.locked ? 'Unlock level' : 'Lock level',
 )
@@ -73,16 +78,14 @@ async function save() {
   error.value = null
   try {
     if (props.mode === 'level') {
-      await call('gameplan.trust_levels.set_member_level', {
-        community: props.community,
+      await call('gameplan.trust_levels.set_level', {
         user: props.member.user,
-        level: level.value,
+        level: Number(level.value),
         reason: reason.value,
       })
-      toast.success(`Level changed to ${level.value}.`)
+      toast.success(`Level changed to ${LEVEL_NAMES[Number(level.value)]}.`)
     } else {
-      await call('gameplan.trust_levels.set_member_lock', {
-        community: props.community,
+      await call('gameplan.trust_levels.set_lock', {
         user: props.member.user,
         locked: props.member.locked ? 0 : 1,
         reason: reason.value,

@@ -207,6 +207,7 @@ doc_events = {
 		"after_insert": [
 			"gameplan.new_user_limits.record_first_day_post",
 			"gameplan.approval_policy.record_accepted",
+			"gameplan.trust_levels.check_after_post",
 		],
 	},
 	"GP Comment": {
@@ -228,6 +229,7 @@ doc_events = {
 		"after_insert": [
 			"gameplan.new_user_limits.record_first_day_post",
 			"gameplan.approval_policy.record_accepted",
+			"gameplan.trust_levels.check_after_post",
 		],
 	},
 	"GP Poll": {
@@ -243,6 +245,7 @@ doc_events = {
 			"gameplan.slow_mode.clear_state",
 			"gameplan.posting_limits.clear_user",
 			"gameplan.restrictions.clear_state",
+			"gameplan.trust_levels.delete_user_rows",
 		],
 		"on_update": "gameplan.gameplan.doctype.gp_user_profile.gp_user_profile.on_user_update",
 	},
@@ -258,6 +261,7 @@ before_request = [
 	"gameplan.public_access.refuse_generic_routes_for_anonymous",
 	"gameplan.public_access.limit_anonymous_request_rate",
 	"gameplan.watched_word_payload.guard_source_routes",
+	"gameplan.trust_levels.record_visit",
 ]
 after_request = [
 	"gameplan.watched_word_payload.after_request",
@@ -281,7 +285,7 @@ scheduler_events = {
 	"daily": [
 		"gameplan.demo.demo.generate_data_daily",
 		"gameplan.email_digest.send_due_email_digests",
-		"gameplan.trust_levels.promote_trusted",
+		"gameplan.trust_levels.nightly",
 	],
 	# Every five minutes, not hourly: the mail is still hourly inside a user's active hours,
 	# but the closing mail has to go out as the hours end (notifications/delivery.py).

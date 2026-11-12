@@ -98,16 +98,6 @@ class GPTeam(HasVisibility, Archivable, Document):
 	def on_update(self):
 		self.refresh_anonymous_readable_flags()
 		self.reconcile_access_after_visibility_change()
-		self.remove_levels_of_departed_members()
-
-	def remove_levels_of_departed_members(self):
-		"""Leaving a Community deletes the member's trust level; rejoining starts at New (D75)."""
-		before = self.get_doc_before_save()
-		if not before:
-			return
-		gone = {member.user for member in before.members} - {member.user for member in self.members}
-		if gone:
-			frappe.db.delete("GP Approval Counter", {"community": str(self.name), "user": ["in", list(gone)]})
 
 	def after_insert(self):
 		self.create_general_space()

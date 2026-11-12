@@ -114,18 +114,20 @@
       :lifting="lifting"
       @saved="saved"
     />
-    <Dialog v-model:open="historyOpen" title="Account restriction history">
+    <Dialog v-model:open="historyOpen" title="Account history">
       <ScrollArea class="h-96" viewport-class="h-96 pr-3">
         <div v-for="row in history" :key="row.name" class="border-b border-outline-gray-2 py-4">
           <p class="text-base-medium">
             {{ row.action }} ·
-            {{ row.action === 'Restriction Expired' ? 'System' : useUser(row.owner).full_name }}
+            {{ systemActions.includes(row.action) ? 'System' : useUser(row.owner).full_name }}
           </p>
           <p class="mt-1 text-p-sm text-ink-gray-6">
             {{ dayjsLocal(row.creation).format('D MMM YYYY, h:mm A z') }}
           </p>
           <p class="mt-2 whitespace-pre-wrap text-base">{{ row.reason }}</p>
-          <p class="mt-2 text-base text-ink-gray-6">{{ restrictionTransition(row) }}</p>
+          <p class="mt-2 text-base text-ink-gray-6">
+            {{ row.level ? levelTransition(row) : restrictionTransition(row) }}
+          </p>
         </div>
         <Button v-if="historyCursor" @click="loadHistory(historyCursor)">More history</Button>
       </ScrollArea>
@@ -181,6 +183,13 @@ type HistoryItem = {
   reason?: string
   expires_at?: string
   previous_expires_at?: string
+  previous_level?: string
+  level?: string
+}
+const systemActions = ['Restriction Expired', 'Regular Promotion', 'Regular Demotion']
+function levelTransition(row: HistoryItem) {
+  if (['Level Locked', 'Level Unlocked'].includes(row.action)) return `Level ${row.level}`
+  return `${row.previous_level || 'New'} → ${row.level}`
 }
 type Page<T> = { items: T[]; has_more: boolean; next_cursor: string }
 type Candidate = { name: string; full_name: string; user_image?: string }

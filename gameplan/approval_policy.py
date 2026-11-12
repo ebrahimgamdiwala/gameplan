@@ -4,7 +4,9 @@ from frappe.utils import cint
 from gameplan.approval_files import publishing_submission
 from gameplan.community_bans import can_moderate_community
 from gameplan.permissions import get_content_project, require_can_manage_community
-from gameplan.trust_levels import evaluate, is_enabled, promote_on_accept
+
+# Levels a Community can require before posts skip approval; "" holds nobody (D113).
+LEVEL_POLICIES = ("", "Basic", "Member")
 
 
 @frappe.whitelist(methods=["GET", "POST"])
@@ -25,6 +27,30 @@ def set_policy(community: str, count: int):
 	return count
 
 
+@frappe.whitelist(methods=["GET", "POST"])
+def get_level_policy(community: str):
+	"""Return the level below which a Community holds posts for approval, and whether levels are on."""
+	from gameplan.trust_levels import is_enabled
+
+	require_can_manage_community(community)
+	return {
+		"levels_enabled": is_enabled(),
+		"min_level": frappe.db.get_value("GP Team", community, "approval_min_level") or "",
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def set_level_policy(community: str, min_level: str):
+	"""Hold posts from members below Basic or Member for approval, or none with "". Community admins."""
+	require_can_manage_community(community)
+	if min_level not in LEVEL_POLICIES:
+		frappe.throw("Choose no approval, Basic or Member")
+	if not frappe.db.get_value("GP Team", community, "name", for_update=True):
+		raise frappe.DoesNotExistError(f"GP Team {community} not found")
+	frappe.db.set_value("GP Team", community, "approval_min_level", min_level)
+	return get_level_policy(community)
+
+
 def needs_approval(doc):
 	project = get_content_project(doc)
 	if not project:
@@ -34,14 +60,19 @@ def needs_approval(doc):
 
 	if requires_approval(doc):
 		return True
+	from gameplan.trust_levels import LEVELS, is_enabled, level_of
+
+	if is_enabled():
+		# While levels are on, they replace the first-N rule (D113, D124).
+		minimum = frappe.db.get_value("GP Team", community, "approval_min_level")
+		if not minimum or can_moderate_community(community):
+			return False
+		level = level_of()
+		return level is not None and level < LEVELS.index(minimum)
 	threshold = cint(frappe.db.get_value("GP Team", community, "approval_post_count"))
 	if not threshold or can_moderate_community(community):
 		return False
-	row = counter(community)
-	if is_enabled(community):
-		# Levels replace the count (D64). The level sits on the row just read.
-		return (evaluate(community, frappe.session.user, row).level or "New") == "New"
-	return row.accepted < threshold
+	return counter(community).accepted < threshold
 
 
 def guard_publication(doc, method=None):
@@ -65,8 +96,6 @@ def record_accepted(doc, method=None):
 		return
 	row = counter(community)
 	frappe.db.set_value("GP Approval Counter", row.name, "accepted", row.accepted + 1)
-	row.accepted += 1
-	promote_on_accept(community, row)
 
 
 def supports_approval(doc):
@@ -75,16 +104,13 @@ def supports_approval(doc):
 	)
 
 
-COUNTER_FIELDS = ["name", "user", "accepted", "level", "locked", "level_changed_at", "last_unclean_at"]
-
-
-def counter(community, user=None):
-	user = user or frappe.session.user
+def counter(community):
+	user = frappe.session.user
 	frappe.db.get_value("User", user, "name", for_update=True)
 	row = frappe.db.get_value(
 		"GP Approval Counter",
 		{"community": community, "user": user},
-		COUNTER_FIELDS,
+		["name", "accepted"],
 		as_dict=True,
 		for_update=True,
 	)
@@ -123,9 +149,7 @@ def counter(community, user=None):
 		)
 	row = frappe.get_doc(doctype="GP Approval Counter", community=community, user=user, accepted=accepted)
 	row.insert(ignore_permissions=True)
-	return frappe._dict(
-		name=row.name, user=user, accepted=accepted, level="New", locked=0, level_changed_at=None, last_unclean_at=None
-	)
+	return frappe._dict(name=row.name, accepted=accepted)
 
 
 def delete_counters(doc, method=None):

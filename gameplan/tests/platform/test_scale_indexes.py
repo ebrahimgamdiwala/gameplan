@@ -12,6 +12,7 @@ INDEXES = [
 	("tabGP Discussion", "author_discussions"),
 	("tabGP Discussion", "hidden_discussions"),
 	("tabGP Discussion", "spam_removed_discussions"),
+	("tabGP Reaction", "user_reactions"),
 	("tabGP Notification", "discussion_notifications"),
 	("tabGP Notification", "comment_notifications"),
 ]

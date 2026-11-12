@@ -1,110 +1,78 @@
 # Trust levels
 
-Status: draft spec for review. Nothing is built.
-Decisions: D62 to D77 in [moderation decisions](moderation-decisions.md). This file adds proposals and marks them as such.
+Decisions D103 to D132 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
 
-## Goal
-
-A new contributor starts under review. A contributor who has taken part well for long enough earns more freedom without a moderator deciding. A moderator can always override.
+Trust levels mirror Discourse. Each person has one site-wide level. Members earn the first three levels from what they do, keep Regular only while they stay active, and get Leader only by hand. Levels are off until a global admin turns them on.
 
 ## Levels
 
-| Level | Approval | Content caps |
-| --- | --- | --- |
-| New | Applies if the Community's approval policy is on | Site caps |
-| Member | Skipped | Site caps |
-| Trusted | Skipped | Link, image, file, and mention caps do not apply |
+| Level | Earned by | Unlocks | Report weight |
+| --- | --- | --- | --- |
+| 0 New | Joining | Approval in Communities that hold New posts. The new-user limits: 3 discussions and 10 replies on the first day, 1 image, 2 links, no files, 2 mentions, no @everyone. | 1 |
+| 1 Basic | 5 discussions entered, visits on 2 days, 1 accepted post | The new-user limits end. The site content caps apply. | 1 |
+| 2 Member | Visits on 15 days, 1 reaction given, 1 received, replies in 3 discussions, 20 discussions entered | Twice the posting-rate limits | 2 |
+| 3 Regular | In the last 100 days: visits on 50 days, replies in 10 discussions, 25% of new discussions entered (at most 500), 30 reactions given, 20 received from at least 5 people, at most 5 posts removed by moderators. No ban, suspension, or silence in the last 180 days. | Skips the content caps | 3 |
+| 4 Leader | A global admin only | Nothing beyond report weight (D132) | 3 |
 
-Posting-rate limits apply to everyone except global admins. The stricter caps for public-access Guests apply at every level. Community staff and global admins have no level and keep today's exemptions.
+Global admins edit every number in Site administration. Each has a fixed range.
 
-## Switch
+## Who has a level
 
-Each Community has a switch, off by default. While off, behavior is exactly what it is today, including the approval threshold of D37. A Community admin or global admin turns it on or off.
+- Members and invited Guests have one. Global admins do not.
+- Community staff have one and keep their exemptions inside the Communities they help run.
+- Only the member, Community staff, and global admins see a level.
 
-## Promotion
+## Signals
 
-- **New to Member:** the member's accepted contributions in that Community reach the Member threshold (default 3). The check runs in the code that counts an accepted contribution (D38), so the promotion is immediate.
-- **Member to Trusted:** accepted contributions reach the Trusted threshold (default 25), the member has belonged to the Community for the minimum days (default 30), and the record is clean (D68). A nightly job checks only members whose conditions could have changed.
-- A Community ban pauses promotion while it lasts.
-- A level never drops by itself.
+| Signal | Source |
+| --- | --- |
+| Discussions entered | `GP Discussion Visit`, by `last_visit` inside the Regular window |
+| Visit days | `GP Visit Day`, one row per member per UTC day |
+| Accepted posts | Published discussions and replies that are not removed |
+| Reactions given | `GP Reaction` by `user` |
+| Reactions received | Reactions by other people on the member's posts |
+| Replies in distinct discussions | `GP Comment` by owner, one per discussion |
+| Removed posts | The member's posts with `hidden_at` or `spam_removed_at` inside the window |
+| Restrictions | An active ban, suspension, or silence, or a Ban, Suspend, or Silence log entry inside 180 days |
+
+Reading time and posts read are not tracked.
+
+## When levels change
+
+- **A new visit day.** The first request of a UTC day sets a cache key and queues a job that records the day. A New or Basic member is then checked for Basic and Member.
+- **A published post.** A New or Basic author is checked again.
+- **The nightly job.** Members who visited since yesterday are checked for Regular. Regulars past their grace period are checked again, and drop to Member if they fall short.
+- **Turning levels on.** A job counts past visit days from posts, reactions, and discussion visits, then works out each person's level up to Member. Nobody is told.
+- **A first read.** A member the job has not reached yet is worked out the first time their level is needed.
+
+New, Basic, and Member never drop by themselves. A promotion to Regular, automatic or manual, starts a 14-day grace period. A lock stops every automatic change. An active ban, suspension, or silence pauses promotion.
+
+## Approval
+
+While levels are on, each Community admin chooses whether to hold posts from members below Basic or Member, or from nobody. Community staff are never held. While levels are off, the first-N rule (D37) works as before.
 
 ## Manual changes
 
-Moderators, Community admins, and global admins can:
-
-- set a member to any level, or lower it, with a required reason (500 characters),
-- lock a level, which stops all automatic changes, or unlock it.
-
-Each manual change is written to moderation History with actor, time, reason, and old and new level. Automatic promotion to Trusted is written as System.
-
-## Turning the switch on
-
-A background job works through the Community in chunks. It computes each member's level from existing contributions (D39), membership age, and the moderation log. Existing approval and caps behavior continues for everyone until the job finishes. Staff are skipped. Nobody is notified for this first pass.
-
-## Visibility
-
-| Who | Sees |
-| --- | --- |
-| Moderators and admins | Every member's level, its reason, and each requirement as met or not met |
-| The member | Their own level and progress to the next one, near the approval notice |
-| Other members | Nothing |
+Global admins set or lock a level with a reason. Each change goes to the member's account history.
 
 ## Notifications
 
-In-app only, to the member, when they are promoted by rule or by hand. Nothing when a level is lowered. The moderator's reason stays staff-only.
-
-## Built in the engine (branch `feat/trust-levels-engine`)
-
-What the engine does where the proposals below were open:
-
-- **Clean record is kept current by moderation actions.** Hiding or spam-removing a member's post, upholding a report on it, and a Community ban each stamp `last_unclean_at` on the member's row. Nothing reads the moderation log when a member is promoted. Restoring a post does not clear the stamp, so a wrongly hidden post can delay Trusted by up to 90 days; a moderator can promote by hand.
-- **Rejoining recomputes.** Leaving a Community deletes the row, including any manual level and lock. A rejoining member is worked out again from their published posts (D39), so they are Member again if enough posts remain, and Trusted needs the days as a member to start over.
-- **Turning levels on** starts the chunked background job (D74). Until it reaches a member, their row is worked out the first time it is read. The staff list only reads stored values and marks members the job has not reached as pending.
-- **Reading endpoints:** `get_settings` and `member_levels` are read-only. `my_level` is POST because it can store a first evaluation, and Frappe discards writes made during a GET.
-
-## Proposed implementation
-
-These were proposals when the spec was drafted.
-
-- **Storage:** add `level`, `locked`, and `level_changed_at` to the existing GP Approval Counter row, which is already one row per Community and member. This avoids a second table and a second lookup on the posting path.
-- **Settings:** add `trust_levels_enabled`, `member_threshold`, `trusted_threshold`, `trusted_days`, and `clean_days` to the Community's approval settings. The old threshold field feeds `member_threshold`.
-- **Hooks:** `approval_policy` asks the member's level instead of comparing the count. `check_caps` skips the four caps for Trusted.
-- **Clean record:** read GP Moderation Log with an index on (author, community, action, creation). Add the index in a patch.
-- **Nightly job:** select members with `level = Member`, not locked, with enough accepted contributions and days, in pages of 2,000. Commit every 50 rows and continue as a new job after a time budget, like the digest.
-- **Backfill job:** the same loop, over all members of one Community, on the `long` queue.
-- **API:** `set_member_level(community, user, level, reason)`, `lock_member_level(community, user, locked, reason)`, `member_levels(community, level, start)` with the paging cap, and `my_level(community)`. Each new method gets a one-line docstring, and the agent guide in `mcp.py` is updated.
-- **Realtime:** the existing user-scoped event refreshes the member's own panel after a change.
+Members get an in-app notification for each promotion, and when they drop from Regular to Member.
 
 ## Scale
 
-Checked against the scale-test findings:
+- Each count stops at the number its requirement needs, and reads the member's own rows through an index.
+- The posting path reads one `GP Trust Level` row by primary key.
+- A visit costs one cache read per request and one job per member per day.
+- The nightly job reads only Members who visited since yesterday and Regulars past their grace period. Both jobs commit in batches and continue as a new job after a time limit.
+- New indexes: `GP Reaction (user, creation)`, `GP Visit Day (user, day)` unique, `GP Visit Day (day, user)`, and `GP Trust Level (level, locked, user)`.
 
-- No per-view writes, and no new fan-out per reply.
-- The posting path adds no query: the level lives on the row already read for approval.
-- The nightly job and the backfill are chunked and resumable.
-- Names are passed as text, so the static guard test applies.
-- The member list is paged, with the 5,000-row offset cap.
+## API
 
-## Tests
+- `gameplan.trust_levels.get_settings` and `save_settings`: the switch and requirements, for global admins.
+- `gameplan.trust_levels.set_level` and `set_lock`: manual changes, for global admins.
+- `gameplan.approval_policy.get_level_policy` and `set_level_policy`: a Community's approval level, for its admins.
 
-- Promotion at exactly the threshold, and not one below.
-- Trusted needs all three signals, and each fails alone.
-- Each unclean event (hidden post, spam removal, upheld report, ban) blocks Trusted for 90 days, and a rejected submission or dismissed report does not.
-- A lock stops the nightly job and a manual change still works.
-- A ban pauses promotion.
-- Staff are skipped, and keep their tracked level after losing the role.
-- Leaving and rejoining resets to New.
-- The switch off leaves approval and caps exactly as today (the existing tests pass unchanged).
-- Trusted skips the four caps but not posting-rate limits, and not the public-access Guest caps.
-- The backfill is resumable, silent, and leaves behavior unchanged until it finishes.
-- History records manual changes and Trusted promotions, and not Member promotions.
-- A moderator cannot read levels outside their Community.
+## Leader
 
-## Pull requests (D77)
-
-1. **12/13, engine:** fields, settings, hooks, jobs, API, History, notifications, patch, tests.
-2. **13/13, UI:** Trust levels tab, requirements panel, settings beside approval, the member's own panel, and a browser test.
-
-## Not in this version
-
-Using levels for posting limits, slow mode, or report weight. Weighted auto-hide and automatic silencing, which would build on levels later. A site-wide master switch. Public badges.
+Every member who can see a Space can already edit, close, reopen, pin, and move its discussions (`can_edit_content`). That rule stays, so Leader carries only report weight 3 (D132).
