@@ -55,4 +55,4 @@ gameplan.gameplan.doctype.gp_invitation.patches.hash_invitation_keys
 
 gameplan.patches.backfill_user_restrictions
 gameplan.gameplan.doctype.gp_posting_settings.patches.set_content_cap_defaults
-gameplan.patches.add_scale_indexes #2026-11-12 community staff index
+gameplan.patches.add_scale_indexes #2026-11-12 reaction index for trust levels

@@ -1,33 +1,55 @@
-"""Per-Community trust levels: New, Member and Trusted (decisions D62 to D77).
+"""Site-wide trust levels that mirror Discourse: New, Basic, Member, Regular and Leader.
 
-The level lives on the member's GP Approval Counter row, which approval already reads, so the
-posting path adds no query. Levels are worked out when a row is first read after the switch
-goes on, when a contribution is accepted, and in a nightly job. Nothing scans a Community.
+Decisions D103 to D131. A member earns Basic and Member from visits, discussions entered,
+reactions and replies, Regular from the same signals over a rolling window, and Leader only by
+hand. Levels are stored on GP Trust Level, one row a person, so the posting path reads one row
+by primary key. Requirements are checked once a day per member, when a post is accepted, and
+in a nightly job that reads only candidate rows. Every count stops at the number it needs.
 """
+
+import math
+from datetime import timedelta
 
 import frappe
 from frappe import _
 from frappe.query_builder import functions as fn
-from frappe.utils import add_days, cint, get_datetime
+from frappe.utils import cint, get_datetime
 
-from gameplan.community_bans import can_moderate_community, is_banned
-from gameplan.permissions import require_can_manage_community
-from gameplan.restrictions import utc_now
+import gameplan
+from gameplan.api import require_admin
+from gameplan.restrictions import active_condition, utc_now
 
-LEVELS = ("New", "Member", "Trusted")
-SETTING_FIELDS = (
-	"trust_levels_enabled",
-	"approval_post_count",
-	"trust_trusted_count",
-	"trust_trusted_days",
-	"trust_clean_days",
-)
-LEVEL_ACTIONS = ("Level Changed", "Level Locked", "Level Unlocked", "Trusted Promotion")
-PAGE = 50
+LEVELS = ("New", "Basic", "Member", "Regular", "Leader")
+NEW, BASIC, MEMBER, REGULAR, LEADER = range(5)
+LEVEL_ACTIONS = ("Level Changed", "Level Locked", "Level Unlocked", "Regular Promotion", "Regular Demotion")
+REMOVAL_ACTIONS = ("Ban", "Suspend", "Silence")
+# Setting: (default, smallest, largest).
+REQUIREMENTS = {
+	"basic_entered": (5, 0, 1000),
+	"basic_days": (2, 0, 1000),
+	"basic_accepted": (1, 0, 1000),
+	"member_days": (15, 0, 1000),
+	"member_given": (1, 0, 1000),
+	"member_received": (1, 0, 1000),
+	"member_replied": (3, 0, 1000),
+	"member_entered": (20, 0, 1000),
+	"regular_window": (100, 30, 365),
+	"regular_days": (50, 0, 365),
+	"regular_replied": (10, 0, 1000),
+	"regular_entered_percent": (25, 0, 100),
+	"regular_entered_max": (500, 0, 5000),
+	"regular_given": (30, 0, 1000),
+	"regular_received": (20, 0, 1000),
+	"regular_received_users": (5, 0, 1000),
+	"regular_max_removed": (5, 0, 1000),
+	"regular_restriction_days": (180, 0, 3650),
+	"regular_grace_days": (14, 0, 365),
+}
 JOB_BATCH = 500
 COMMIT_EVERY = 50
 TIME_BUDGET = 240
 CONTINUATION_BUDGET = 1200
+VISIT_CACHE_SECONDS = 26 * 3600
 
 
 def clock():
@@ -36,254 +58,473 @@ def clock():
 	return time.monotonic()
 
 
-def settings(community):
-	"""The Community's trust settings. Member threshold is the approval threshold (D64)."""
-	row = frappe.db.get_value("GP Team", str(community), list(SETTING_FIELDS), as_dict=True) or {}
+def config():
+	doc = frappe.get_cached_doc("GP Trust Settings")
 	return frappe._dict(
-		enabled=cint(row.get("trust_levels_enabled")),
-		member_count=cint(row.get("approval_post_count")),
-		trusted_count=cint(row.get("trust_trusted_count")),
-		trusted_days=cint(row.get("trust_trusted_days")),
-		clean_days=cint(row.get("trust_clean_days")),
+		enabled=cint(doc.enabled),
+		**{field: cint(doc.get(field)) for field in REQUIREMENTS},
 	)
 
 
-def is_enabled(community):
-	return bool(cint(frappe.db.get_value("GP Team", str(community), "trust_levels_enabled")))
+def is_enabled():
+	return bool(config().enabled)
 
 
-def is_trusted(community, user=None):
-	"""True for a Trusted member of a Community with levels on. One indexed read, no lock."""
-	user = user or frappe.session.user
-	if not is_enabled(community):
+def has_level(user):
+	"""Members and invited Guests have a level. Global admins and visitors do not (D114, D115)."""
+	if not user or gameplan.is_anonymous(user) or gameplan.is_admin(user):
 		return False
-	level = frappe.db.get_value("GP Approval Counter", {"community": str(community), "user": user}, "level")
-	return level == "Trusted"
+	roles = set(frappe.get_roles(user))
+	return bool(roles & {"Gameplan Member", "Gameplan Guest"})
 
 
-def target_level(config, accepted, days_as_member, last_unclean_at, now=None):
-	"""The level the rules give a member. Pure, so it is easy to test."""
-	if accepted < config.member_count:
-		return "New"
-	now = now or utc_now()
-	clean = not last_unclean_at or get_datetime(last_unclean_at) <= add_days(now, -config.clean_days)
-	if accepted >= config.trusted_count and days_as_member >= config.trusted_days and clean:
-		return "Trusted"
-	return "Member"
+def level_of(user=None):
+	"""The member's level, or None while levels are off or for someone outside levels."""
+	user = user or frappe.session.user
+	if not is_enabled() or not has_level(user):
+		return None
+	return ensure_row(user).level
 
 
-def higher(current, other):
-	return max(current, other, key=LEVELS.index)
-
-
-def days_as_member(community, user, now=None):
-	joined = frappe.db.get_value(
-		"GP Member", {"parent": str(community), "parenttype": "GP Team", "user": user}, "creation"
+def stored_row(user):
+	return frappe.db.get_value(
+		"GP Trust Level", user, ["name", "user", "level", "locked", "grace_until"], as_dict=True
 	)
-	if not joined:
-		return 0
-	return max(0, (get_datetime(now or utc_now()) - get_datetime(joined)).days)
 
 
-def last_unclean_event(community, user, now=None):
-	"""When this member last had a post hidden or spam-removed, a report upheld, or a ban.
-
-	Only used the first time a member's level is worked out; moderation actions keep it current.
-	"""
-	community, user = str(community), str(user)
-	cutoff = add_days(now or utc_now(), -max(1, settings(community).clean_days))
-	Project, Discussion, Comment, Review, Log = (
-		frappe.qb.DocType(dt)
-		for dt in ("GP Project", "GP Discussion", "GP Comment", "GP Review", "GP Moderation Log")
-	)
-	times = []
-	spaces = frappe.qb.from_(Project).select(Project.name).where(Project.team == community)
-	discussions = (
-		frappe.qb.from_(Discussion).where(Discussion.project.isin(spaces)).where(Discussion.owner == user)
-	)
-	for column in (Discussion.hidden_at, Discussion.spam_removed_at):
-		times += discussions.select(fn.Max(column)).where(column > cutoff).run(pluck=True)
-	in_community = frappe.qb.from_(Discussion).select(Discussion.name).where(Discussion.project.isin(spaces))
-	comments = frappe.qb.from_(Comment).where(
-		(Comment.owner == user)
-		& (Comment.reference_doctype == "GP Discussion")
-		& Comment.reference_name.isin(in_community)
-	)
-	for column in (Comment.hidden_at, Comment.spam_removed_at):
-		times += comments.select(fn.Max(column)).where(column > cutoff).run(pluck=True)
-	own = discussions.select(fn.Cast_(Discussion.name, "varchar"))
-	times += (
-		frappe.qb.from_(Review)
-		.select(fn.Max(Review.decided_at))
-		.where((Review.decision == "Uphold") & (Review.decided_at > cutoff))
-		.where((Review.reference_doctype == "GP Discussion") & Review.reference_name.isin(own))
-		.run(pluck=True)
-	)
-	times += (
-		frappe.qb.from_(Log)
-		.select(fn.Max(Log.creation))
-		.where(
-			(Log.community == community)
-			& (Log.user == user)
-			& (Log.action == "Ban")
-			& (Log.creation > cutoff)
-		)
-		.run(pluck=True)
-	)
-	times = [t for t in times if t]
-	return max(times) if times else None
-
-
-def mark_unclean(community, user):
-	"""Record that a moderation action just touched this member, for the clean-record rule."""
-	if not community or not user or not is_enabled(community):
-		return
-	name = frappe.db.get_value("GP Approval Counter", {"community": str(community), "user": user}, "name")
-	if name:
-		frappe.db.set_value("GP Approval Counter", name, "last_unclean_at", utc_now(), update_modified=False)
-
-
-def evaluate(community, user, row, config=None):
-	"""Work out a row's level the first time it is read with levels on. Never lowers a level."""
-	if row.locked or row.level_changed_at:
+def ensure_row(user):
+	"""The member's row, worked out from their activity the first time it is needed (D125)."""
+	row = stored_row(user)
+	if row:
+		row.level = cint(row.level)
 		return row
-	config = config or settings(community)
-	if not config.enabled:
-		return row
-	level = higher(
-		row.level or "New",
-		target_level(
-			config,
-			cint(row.accepted),
-			days_as_member(community, user),
-			last_unclean_event(community, user),
-		),
-	)
-	if is_banned(community, user):
-		level = row.level or "New"
-	apply_level(community, user, row, level, notify=False)
+	level = early_level(user, config())
+	try:
+		frappe.get_doc(doctype="GP Trust Level", user=user, level=level).insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		# Another request created it first.
+		pass
+	row = stored_row(user)
+	row.level = cint(row.level)
 	return row
 
 
-def apply_level(community, user, row, level, *, notify=True):
-	"""Store a level on the row, tell the member about a promotion, and keep the row current."""
-	previous = row.level or "New"
-	values = {"level": level, "level_changed_at": utc_now()}
-	frappe.db.set_value("GP Approval Counter", row.name, values, update_modified=False)
+# Signals --------------------------------------------------------------------------------------
+# Each count reads at most `limit` rows through an index on the member's own rows.
+
+
+def entered(user, limit, since=None):
+	Visit = frappe.qb.DocType("GP Discussion Visit")
+	query = frappe.qb.from_(Visit).select(Visit.name).where(Visit.user == user)
+	if since:
+		query = query.where(Visit.last_visit >= since)
+	return len(query.limit(limit).run()) if limit else 0
+
+
+def visit_days(user, limit, since=None):
+	Day = frappe.qb.DocType("GP Visit Day")
+	query = frappe.qb.from_(Day).select(Day.name).where(Day.user == user)
+	if since:
+		query = query.where(Day.day >= since.date())
+	return len(query.limit(limit).run()) if limit else 0
+
+
+def accepted(user, limit):
+	if not limit:
+		return 0
+	Discussion, Comment = frappe.qb.DocType("GP Discussion"), frappe.qb.DocType("GP Comment")
+	found = len(
+		frappe.qb.from_(Discussion)
+		.select(Discussion.name)
+		.where(
+			(Discussion.owner == user) & Discussion.hidden_at.isnull() & Discussion.spam_removed_at.isnull()
+		)
+		.limit(limit)
+		.run()
+	)
+	if found < limit:
+		found += len(
+			frappe.qb.from_(Comment)
+			.select(Comment.name)
+			.where((Comment.owner == user) & (Comment.reference_doctype == "GP Discussion"))
+			.where(
+				Comment.deleted_at.isnull() & Comment.hidden_at.isnull() & Comment.spam_removed_at.isnull()
+			)
+			.limit(limit - found)
+			.run()
+		)
+	return found
+
+
+def given(user, limit, since=None):
+	Reaction = frappe.qb.DocType("GP Reaction")
+	query = frappe.qb.from_(Reaction).select(Reaction.name).where(Reaction.user == user)
+	if since:
+		query = query.where(Reaction.creation >= since)
+	return len(query.limit(limit).run()) if limit else 0
+
+
+def received(user, limit, since=None, *, distinct=False):
+	"""Reactions other people gave the member's posts, or with `distinct` the people who gave them."""
+	if not limit:
+		return 0
+	Reaction = frappe.qb.DocType("GP Reaction")
+	found = set() if distinct else []
+	for doctype in ("GP Discussion", "GP Comment"):
+		Post = frappe.qb.DocType(doctype)
+		query = (
+			frappe.qb.from_(Post)
+			.join(Reaction)
+			# Reaction names are text: a number here would stop the index being used.
+			.on(
+				(Reaction.reference_doctype == doctype)
+				& (Reaction.reference_name == fn.Cast_(Post.name, "varchar"))
+			)
+			.select(Reaction.user)
+			.where((Post.owner == user) & (Reaction.user != user))
+		)
+		if since:
+			query = query.where(Reaction.creation >= since)
+		if distinct:
+			query = query.distinct()
+		rows = query.limit(limit - len(found)).run(pluck=True)
+		if distinct:
+			found.update(rows)
+		else:
+			found.extend(rows)
+		if len(found) >= limit:
+			break
+	return len(found)
+
+
+def replied(user, limit, since=None):
+	Comment = frappe.qb.DocType("GP Comment")
+	query = (
+		frappe.qb.from_(Comment)
+		.select(Comment.reference_name)
+		.distinct()
+		.where(
+			(Comment.owner == user)
+			& (Comment.reference_doctype == "GP Discussion")
+			& Comment.deleted_at.isnull()
+		)
+	)
+	if since:
+		query = query.where(Comment.creation >= since)
+	return len(query.limit(limit).run()) if limit else 0
+
+
+def removed(user, limit, since):
+	"""Posts of the member that a moderator hid or removed as spam since `since`."""
+	found = 0
+	for doctype in ("GP Discussion", "GP Comment"):
+		Post = frappe.qb.DocType(doctype)
+		found += len(
+			frappe.qb.from_(Post)
+			.select(Post.name)
+			.where((Post.owner == user) & ((Post.hidden_at >= since) | (Post.spam_removed_at >= since)))
+			.limit(limit - found)
+			.run()
+		)
+		if found >= limit:
+			break
+	return found
+
+
+def restricted(user, since=None):
+	"""A ban, suspension or silence in force now, or with `since` one that started after it."""
+	Restriction = frappe.qb.DocType("GP User Restriction")
+	if (
+		frappe.qb.from_(Restriction)
+		.select(Restriction.name)
+		.where((Restriction.user == user) & active_condition(Restriction))
+		.limit(1)
+		.run()
+	):
+		return True
+	if not since:
+		return False
+	Log = frappe.qb.DocType("GP Moderation Log")
+	return bool(
+		frappe.qb.from_(Log)
+		.select(Log.name)
+		.where((Log.user == user) & Log.action.isin(REMOVAL_ACTIONS) & (Log.creation >= since))
+		.limit(1)
+		.run()
+	)
+
+
+def entered_needed(cfg, since):
+	"""Regular needs a share of the discussions started site-wide in the window, up to a cap."""
+	key = f"gameplan:trust:discussions_since:{since.date()}"
+	started = frappe.cache.get_value(key)
+	if started is None:
+		Discussion = frappe.qb.DocType("GP Discussion")
+		started = (
+			frappe.qb.from_(Discussion)
+			.select(fn.Count("*"))
+			.where(
+				(Discussion.creation >= since)
+				& Discussion.hidden_at.isnull()
+				& Discussion.spam_removed_at.isnull()
+			)
+			.run()[0][0]
+		)
+		frappe.cache.set_value(key, started, expires_in_sec=3600)
+	return min(math.ceil(cint(started) * cfg.regular_entered_percent / 100), cfg.regular_entered_max)
+
+
+# Requirements ---------------------------------------------------------------------------------
+
+
+def requirements(user, level, cfg, *, now=None):
+	"""Yield each requirement of `level` as a dict: key, required, actual, met.
+
+	Each actual stops at what the requirement needs, so a generator lets callers stop early.
+	"""
+
+	def at_least(key, required, count):
+		actual = count(required)
+		return {"key": key, "required": required, "actual": actual, "met": actual >= required}
+
+	if level == BASIC:
+		yield at_least("entered", cfg.basic_entered, lambda n: entered(user, n))
+		yield at_least("days", cfg.basic_days, lambda n: visit_days(user, n))
+		yield at_least("accepted", cfg.basic_accepted, lambda n: accepted(user, n))
+	elif level == MEMBER:
+		yield at_least("days", cfg.member_days, lambda n: visit_days(user, n))
+		yield at_least("given", cfg.member_given, lambda n: given(user, n))
+		yield at_least("received", cfg.member_received, lambda n: received(user, n))
+		yield at_least("replied", cfg.member_replied, lambda n: replied(user, n))
+		yield at_least("entered", cfg.member_entered, lambda n: entered(user, n))
+	elif level == REGULAR:
+		now = now or utc_now()
+		since = now - timedelta(days=cfg.regular_window)
+		yield at_least("days", cfg.regular_days, lambda n: visit_days(user, n, since))
+		yield at_least("replied", cfg.regular_replied, lambda n: replied(user, n, since))
+		yield at_least("entered", entered_needed(cfg, since), lambda n: entered(user, n, since))
+		yield at_least("given", cfg.regular_given, lambda n: given(user, n, since))
+		yield at_least("received", cfg.regular_received, lambda n: received(user, n, since))
+		yield at_least(
+			"received_users",
+			cfg.regular_received_users,
+			lambda n: received(user, n, since, distinct=True),
+		)
+		most = cfg.regular_max_removed
+		actual = removed(user, most + 1, since)
+		yield {"key": "removed", "required": most, "actual": actual, "met": actual <= most}
+		clean_since = now - timedelta(days=cfg.regular_restriction_days)
+		hit = restricted(user, clean_since)
+		yield {"key": "restrictions", "required": 0, "actual": int(hit), "met": not hit}
+
+
+def meets(user, level, cfg, *, now=None):
+	return all(requirement["met"] for requirement in requirements(user, level, cfg, now=now))
+
+
+def early_level(user, cfg):
+	"""New, Basic or Member from what the member has done. Regular comes from the nightly job."""
+	if not meets(user, BASIC, cfg):
+		return NEW
+	return MEMBER if meets(user, MEMBER, cfg) else BASIC
+
+
+# Changing a level -----------------------------------------------------------------------------
+
+
+def apply_level(row, level, cfg, *, notify=True):
+	"""Store a level, start the Regular grace period, and tell the member."""
+	previous = cint(row.level)
+	values = {"level": level, "grace_until": None}
+	if level == REGULAR:
+		values["grace_until"] = utc_now() + timedelta(days=cfg.regular_grace_days)
+	frappe.db.set_value("GP Trust Level", row.name, values, update_modified=False)
 	row.update(values)
-	if notify and LEVELS.index(level) > LEVELS.index(previous):
-		notify_promotion(community, user, level)
+	if notify and level != previous:
+		notify_change(row.user, previous, level)
 
 
-def notify_promotion(community, user, level):
-	title = frappe.db.get_value("GP Team", str(community), "title") or ""
+MESSAGES = {
+	BASIC: "You are now Basic. You can add more links, images, files and mentions to your posts.",
+	MEMBER: "You are now a Member. You can post more often.",
+	REGULAR: "You are now a Regular. Your posts skip the content caps.",
+	LEADER: "You are now a Leader.",
+}
+
+
+def notify_change(user, previous, level):
+	if level > previous:
+		message = _(MESSAGES[level])
+	elif previous == REGULAR and level == MEMBER:
+		message = _("You are now a Member. Keep visiting and taking part to become a Regular again.")
+	else:
+		message = _("Your trust level is now {0}.").format(_(LEVELS[level]))
 	frappe.get_doc(
-		doctype="GP Notification",
-		type="Trust Level",
-		to_user=user,
-		from_user=user,
-		team=community,
-		message=_("You are now a Member of {0}. Your posts publish without approval.").format(title)
-		if level == "Member"
-		else _("You are now Trusted in {0}. Your posts skip the link, image, file and mention caps.").format(
-			title
-		),
+		doctype="GP Notification", type="Trust Level", to_user=user, from_user=user, message=message
 	).insert(ignore_permissions=True)
 	from gameplan.realtime import notify_notification_counts_refresh
 
 	notify_notification_counts_refresh([user])
 
 
-def promote_on_accept(community, row):
-	"""New to Member as soon as the contribution that reaches the threshold is accepted (D70)."""
-	config = settings(community)
-	if not config.enabled or row.locked or (row.level or "New") != "New":
-		return
-	if cint(row.accepted) >= config.member_count and not is_banned(community, row.user):
-		apply_level(community, row.user, row, "Member")
-
-
-def log_level(community, user, action, reason="", previous="", level=""):
+def log_level(user, action, reason="", previous=None, level=None):
 	frappe.get_doc(
 		doctype="GP Moderation Log",
-		community=str(community),
+		# Site-wide entries have no Community; account history reads them by "".
+		community="",
 		user=user,
 		action=action,
 		reason=reason,
-		previous_level=previous,
-		level=level,
+		previous_level="" if previous is None else LEVELS[previous],
+		level="" if level is None else LEVELS[level],
 	).insert(ignore_permissions=True)
 
 
-# Settings -----------------------------------------------------------------------------------
+def check_user(user):
+	"""Move a New or Basic member up as far as Member when they qualify (D123)."""
+	if not is_enabled() or not has_level(user):
+		return
+	cfg = config()
+	row = stored_row(user)
+	if not row:
+		ensure_row(user)
+		return
+	if row.locked or cint(row.level) >= MEMBER or restricted(user):
+		return
+	level = early_level(user, cfg)
+	if level > cint(row.level):
+		apply_level(row, level, cfg)
+
+
+def check_after_post(doc, method=None):
+	"""`after_insert` of a published discussion or reply: an accepted post can earn Basic."""
+	from gameplan.approval_policy import supports_approval
+
+	if not supports_approval(doc) or not is_enabled() or not has_level(doc.owner):
+		return
+	row = stored_row(doc.owner)
+	if row and (row.locked or cint(row.level) >= MEMBER):
+		return
+	frappe.enqueue(check_user, queue="short", user=doc.owner, enqueue_after_commit=True, now=frappe.in_test)
+
+
+# Visits ---------------------------------------------------------------------------------------
+
+
+def record_visit():
+	"""`before_request`: count today as a visit day, once per member per UTC day (D122).
+
+	A cache key answers every later request of the day, so this costs one cache read.
+	"""
+	user = frappe.session.user
+	if gameplan.is_anonymous(user) or not is_enabled():
+		return
+	day = utc_now().date().isoformat()
+	key = f"gameplan:trust:visit:{user}:{day}"
+	if frappe.cache.get_value(key):
+		return
+	frappe.cache.set_value(key, 1, expires_in_sec=VISIT_CACHE_SECONDS)
+	if has_level(user):
+		# GET requests roll back their writes, so a job records the day.
+		frappe.enqueue(
+			record_visit_day,
+			queue="short",
+			user=user,
+			day=day,
+			job_id=key,
+			deduplicate=True,
+			now=frappe.in_test,
+		)
+
+
+def record_visit_day(user, day):
+	if frappe.db.exists("GP Visit Day", {"user": user, "day": day}):
+		return
+	add_visit_days(user, [day])
+	check_user(user)
+
+
+def add_visit_days(user, days):
+	frappe.db.bulk_insert(
+		"GP Visit Day",
+		["name", "user", "day", "creation", "modified", "owner", "modified_by"],
+		[(frappe.generate_hash(length=16), user, day, utc_now(), utc_now(), user, user) for day in days],
+		ignore_duplicates=True,
+	)
+
+
+def past_visit_days(user):
+	"""Days with posts, reactions or discussion visits, for the first calculation (D125)."""
+	Discussion, Comment, Reaction, Visit = (
+		frappe.qb.DocType(dt) for dt in ("GP Discussion", "GP Comment", "GP Reaction", "GP Discussion Visit")
+	)
+	days = set()
+	for table, column, owner in (
+		(Discussion, Discussion.creation, Discussion.owner),
+		(Comment, Comment.creation, Comment.owner),
+		(Reaction, Reaction.creation, Reaction.user),
+		(Visit, Visit.creation, Visit.user),
+		(Visit, Visit.last_visit, Visit.user),
+	):
+		days.update(
+			str(day)
+			for day in frappe.qb.from_(table)
+			.select(fn.Date(column))
+			.distinct()
+			.where(owner == user)
+			.run(pluck=True)
+			if day
+		)
+	return sorted(days)
+
+
+# Settings -------------------------------------------------------------------------------------
 
 
 @frappe.whitelist(methods=["GET", "POST"])
-def get_settings(community: str):
-	"""Return the trust level switch and thresholds to Community admins."""
-	require_can_manage_community(community)
-	config = settings(community)
+def get_settings():
+	"""Return the trust level switch and requirements to global admins."""
+	require_admin()
 	return {
-		**config,
-		"defaults": {"member_count": 3, "trusted_count": 25, "trusted_days": 30, "clean_days": 90},
+		**config(),
+		"defaults": {field: default for field, (default, _, _) in REQUIREMENTS.items()},
+		"ranges": {field: [smallest, largest] for field, (_, smallest, largest) in REQUIREMENTS.items()},
 	}
 
 
 @frappe.whitelist(methods=["POST"])
-def save_settings(community: str, enabled: int, trusted_count: int, trusted_days: int, clean_days: int):
-	"""Turn trust levels on or off for a Community and set the Trusted thresholds. Community admins only."""
-	require_can_manage_community(community)
-	if not 1 <= trusted_count <= 100:
-		frappe.throw(_("Choose a Trusted contribution count between 1 and 100"))
-	if not 0 <= trusted_days <= 3650 or not 1 <= clean_days <= 3650:
-		frappe.throw(_("Choose a number of days between 1 and 3650"))
-	community = str(community)
-	if not frappe.db.get_value("GP Team", community, "name", for_update=True):
-		raise frappe.DoesNotExistError(f"GP Team {community} not found")
-	was_enabled = is_enabled(community)
-	frappe.db.set_value(
-		"GP Team",
-		community,
-		{
-			"trust_levels_enabled": 1 if cint(enabled) else 0,
-			"trust_trusted_count": trusted_count,
-			"trust_trusted_days": trusted_days,
-			"trust_clean_days": clean_days,
-		},
-	)
-	if cint(enabled) and not was_enabled:
-		# Every row is worked out again the next time it is read. Stored levels are kept: a
-		# level only goes up by rule.
-		frappe.db.set_value(
-			"GP Approval Counter",
-			{"community": community, "locked": 0},
-			"level_changed_at",
-			None,
-			update_modified=False,
-		)
-		frappe.enqueue(backfill, queue="long", enqueue_after_commit=True, community=community)
-	return settings(community)
+def save_settings(enabled: int, **values):
+	"""Turn site-wide trust levels on or off and set every requirement. Global admins only."""
+	require_admin()
+	doc = frappe.get_doc("GP Trust Settings")
+	was_enabled = cint(doc.enabled)
+	for field, (_default, smallest, largest) in REQUIREMENTS.items():
+		if field not in values:
+			continue
+		value = cint(values[field])
+		if not smallest <= value <= largest:
+			frappe.throw(
+				_("{0} must be between {1} and {2}").format(_(doc.meta.get_label(field)), smallest, largest)
+			)
+		doc.set(field, value)
+	if cint(doc.regular_days) > cint(doc.regular_window):
+		frappe.throw(_("Days visited cannot be more than the Regular window"))
+	doc.enabled = 1 if cint(enabled) else 0
+	doc.save(ignore_permissions=True)
+	if doc.enabled and not was_enabled:
+		frappe.enqueue(backfill, queue="long", enqueue_after_commit=True)
+	return get_settings()
 
 
-# Manual changes ------------------------------------------------------------------------------
+# Manual changes -------------------------------------------------------------------------------
 
 
-def target_row(community, user):
-	"""The member's counter row, created from their existing contributions if they have none."""
-	from gameplan.approval_policy import counter
-
-	return counter(str(community), user)
-
-
-def check_can_change(community, user):
-	if not can_moderate_community(community):
-		frappe.throw(_("Only Community moderators can change a level"), frappe.PermissionError)
-	if not is_enabled(community):
-		frappe.throw(_("Trust levels are not turned on for this Community"))
-	if not frappe.db.exists("GP Member", {"parent": str(community), "parenttype": "GP Team", "user": user}):
-		frappe.throw(_("Member not found"))
-	if can_moderate_community(community, user):
-		frappe.throw(_("Community staff do not have a level"))
+def check_target(user):
+	require_admin()
+	if not frappe.db.exists("User", user) or not has_level(user):
+		frappe.throw(_("Global admins and people without Gameplan access do not have a level"))
+	if not is_enabled():
+		frappe.throw(_("Trust levels are not turned on"))
 
 
 def clean_reason(reason):
@@ -294,121 +535,162 @@ def clean_reason(reason):
 
 
 @frappe.whitelist(methods=["POST"])
-def set_member_level(community: str, user: str, level: str, reason: str):
-	"""Set a member's level by hand, or lower it, with a reason. Community moderators and admins."""
-	if level not in LEVELS:
-		frappe.throw(_("Choose New, Member or Trusted"))
+def set_level(user: str, level: int, reason: str):
+	"""Set a member's level, 0 New to 4 Leader, with a reason. Global admins only."""
+	level = cint(level)
+	if not NEW <= level <= LEADER:
+		frappe.throw(_("Choose a level from 0 New to 4 Leader"))
 	reason = clean_reason(reason)
-	check_can_change(community, user)
-	row = target_row(community, user)
-	previous = row.level or "New"
-	if previous == level:
-		return {"level": level, "locked": cint(row.locked)}
-	apply_level(community, user, row, level)
-	log_level(community, user, "Level Changed", reason, previous, level)
+	check_target(user)
+	row = ensure_row(user)
+	previous = cint(row.level)
+	if previous != level:
+		apply_level(row, level, config())
+		log_level(user, "Level Changed", reason, previous, level)
 	return {"level": level, "locked": cint(row.locked)}
 
 
 @frappe.whitelist(methods=["POST"])
-def set_member_lock(community: str, user: str, locked: int, reason: str):
-	"""Lock a member's level so no rule changes it, or unlock it. Community moderators and admins."""
+def set_lock(user: str, locked: int, reason: str):
+	"""Lock a member's level so no rule changes it, or unlock it, with a reason. Global admins only."""
 	reason = clean_reason(reason)
-	check_can_change(community, user)
-	row = target_row(community, user)
+	check_target(user)
+	row = ensure_row(user)
 	locked = 1 if cint(locked) else 0
-	if cint(row.locked) == locked:
-		return {"level": row.level, "locked": locked}
-	frappe.db.set_value("GP Approval Counter", row.name, "locked", locked, update_modified=False)
-	if not locked:
-		# Unlocking lets the rules look at the member again.
-		frappe.db.set_value("GP Approval Counter", row.name, "level_changed_at", None, update_modified=False)
-	log_level(community, user, "Level Locked" if locked else "Level Unlocked", reason, row.level, row.level)
-	return {"level": row.level, "locked": locked}
+	if cint(row.locked) != locked:
+		frappe.db.set_value("GP Trust Level", row.name, "locked", locked, update_modified=False)
+		log_level(user, "Level Locked" if locked else "Level Unlocked", reason, row.level, row.level)
+	return {"level": cint(row.level), "locked": locked}
 
 
-# Nightly job ---------------------------------------------------------------------------------
+# Jobs -----------------------------------------------------------------------------------------
 
 
-def promote_trusted():
-	"""Daily: queue one job per Community that uses trust levels, to promote members to Trusted."""
-	for community in frappe.get_all("GP Team", filters={"trust_levels_enabled": 1}, pluck="name"):
-		frappe.enqueue(promote_community, queue="long", community=str(community), now=frappe.in_test)
-
-
-def promote_community(community, after="", budget=TIME_BUDGET):
-	"""Promote the members of one Community who now meet every Trusted requirement.
-
-	Reads only rows with enough accepted contributions, through the trust_candidates index.
-	"""
-	config = settings(community)
-	if not config.enabled:
+def nightly():
+	"""Daily: promote Members to Regular and recheck Regulars (D106, D119)."""
+	if not is_enabled():
 		return
+	frappe.enqueue(promote_regulars, queue="long", now=frappe.in_test)
+	frappe.enqueue(recheck_regulars, queue="long", now=frappe.in_test)
+
+
+def promote_regulars(after="", budget=TIME_BUDGET):
+	"""Promote Members who visited since yesterday and now meet every Regular requirement."""
+	cfg = config()
+	if not cfg.enabled:
+		return
+	since = (utc_now() - timedelta(days=1)).date()
+	Level, Day = frappe.qb.DocType("GP Trust Level"), frappe.qb.DocType("GP Visit Day")
 
 	def candidates(after):
-		return frappe.get_all(
-			"GP Approval Counter",
-			filters=[
-				["community", "=", str(community)],
-				["locked", "=", 0],
-				["level", "!=", "Trusted"],
-				["accepted", ">=", config.trusted_count],
-				["name", ">", after],
-			],
-			pluck="name",
-			order_by="name asc",
-			limit=JOB_BATCH,
+		return (
+			frappe.qb.from_(Level)
+			.join(Day)
+			.on(Day.user == Level.user)
+			.select(Level.user)
+			.distinct()
+			.where((Level.level == MEMBER) & (Level.locked == 0) & (Level.user > after) & (Day.day >= since))
+			.orderby(Level.user)
+			.limit(JOB_BATCH)
+			.run(pluck=True)
 		)
+
+	def promote(user):
+		row = stored_row(user)
+		if (
+			row
+			and not row.locked
+			and cint(row.level) == MEMBER
+			and not restricted(user)
+			and meets(user, REGULAR, cfg)
+		):
+			apply_level(row, REGULAR, cfg)
+			log_level(user, "Regular Promotion", "", MEMBER, REGULAR)
 
 	in_slices(
 		candidates,
-		lambda name: promote_row(community, name, config),
-		lambda after: frappe.enqueue(
-			promote_community, queue="long", community=community, after=after, budget=CONTINUATION_BUDGET
-		),
+		promote,
+		lambda after: frappe.enqueue(promote_regulars, queue="long", after=after, budget=CONTINUATION_BUDGET),
 		after,
 		budget,
 	)
 
 
-def promote_row(community, name, config):
-	fields = ["name", "user", "accepted", "level", "locked", "last_unclean_at"]
-	row = frappe.db.get_value("GP Approval Counter", name, fields, as_dict=True)
-	if not row or row.locked or can_moderate_community(community, row.user) or is_banned(community, row.user):
+def recheck_regulars(after="", budget=TIME_BUDGET):
+	"""Move a Regular who no longer meets the requirements to Member, after the grace period."""
+	cfg = config()
+	if not cfg.enabled:
 		return
-	level = target_level(config, cint(row.accepted), days_as_member(community, row.user), row.last_unclean_at)
-	previous = row.level or "New"
-	if LEVELS.index(level) <= LEVELS.index(previous):
-		return
-	apply_level(community, row.user, row, level)
-	if level == "Trusted":
-		log_level(community, row.user, "Trusted Promotion", "", previous, level)
+	now = utc_now()
+	Level = frappe.qb.DocType("GP Trust Level")
+
+	def candidates(after):
+		return (
+			frappe.qb.from_(Level)
+			.select(Level.user)
+			.where((Level.level == REGULAR) & (Level.locked == 0) & (Level.user > after))
+			.where(Level.grace_until.isnull() | (Level.grace_until <= now))
+			.orderby(Level.user)
+			.limit(JOB_BATCH)
+			.run(pluck=True)
+		)
+
+	def recheck(user):
+		row = stored_row(user)
+		if not row or row.locked or cint(row.level) != REGULAR:
+			return
+		if row.grace_until and get_datetime(row.grace_until) > now:
+			return
+		if not meets(user, REGULAR, cfg, now=now):
+			apply_level(row, MEMBER, cfg)
+			log_level(user, "Regular Demotion", "", REGULAR, MEMBER)
+
+	in_slices(
+		candidates,
+		recheck,
+		lambda after: frappe.enqueue(recheck_regulars, queue="long", after=after, budget=CONTINUATION_BUDGET),
+		after,
+		budget,
+	)
 
 
-def backfill(community, after="", budget=TIME_BUDGET):
-	"""Work out every member's level from their existing contributions after the switch goes on (D74).
+def backfill(after="", budget=TIME_BUDGET):
+	"""Work out every member's level from their past activity after levels are turned on (D125).
 
-	Nobody is told, and staff are skipped. Until it finishes, rows are worked out as they are read.
+	Nobody is told. Stored levels never drop here. Until the job reaches a member, their level is
+	worked out the first time it is needed.
 	"""
-	config = settings(community)
-	if not config.enabled:
+	cfg = config()
+	if not cfg.enabled:
 		return
 
-	def members(after):
-		filters = {"parent": str(community), "parenttype": "GP Team", "user": [">", after]}
+	def people(after):
 		return frappe.get_all(
-			"GP Member", filters=filters, pluck="user", order_by="user asc", limit=JOB_BATCH
+			"GP User Profile",
+			filters={"user": [">", after]},
+			pluck="user",
+			order_by="user asc",
+			limit=JOB_BATCH,
 		)
 
 	def work_out(user):
-		if not can_moderate_community(community, user):
-			evaluate(community, user, target_row(community, user), config)
+		if not has_level(user):
+			return
+		add_visit_days(user, past_visit_days(user))
+		row = stored_row(user)
+		if not row:
+			ensure_row(user)
+			return
+		if row.locked:
+			return
+		level = early_level(user, cfg)
+		if level > cint(row.level):
+			apply_level(row, level, cfg, notify=False)
 
 	in_slices(
-		members,
+		people,
 		work_out,
-		lambda after: frappe.enqueue(
-			backfill, queue="long", community=str(community), after=after, budget=CONTINUATION_BUDGET
-		),
+		lambda after: frappe.enqueue(backfill, queue="long", after=after, budget=CONTINUATION_BUDGET),
 		after,
 		budget,
 	)
@@ -431,3 +713,9 @@ def in_slices(fetch, handle, resume, after, budget):
 				resume(after)
 				return
 		frappe.db.commit()  # nosemgrep
+
+
+def delete_user_rows(doc, method=None):
+	"""`on_trash` of User: a deleted account takes its level and visit days with it."""
+	frappe.db.delete("GP Trust Level", {"user": doc.name})
+	frappe.db.delete("GP Visit Day", {"user": doc.name})

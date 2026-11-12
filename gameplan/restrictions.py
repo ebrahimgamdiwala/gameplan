@@ -184,10 +184,6 @@ def set_restriction(
 		action = "Suspension Changed" if same_kind else "Suspend"
 	frappe.local.request_cache.clear()
 	log_action(doc, action, before)
-	if community and cint(enabled):
-		from gameplan.trust_levels import mark_unclean
-
-		mark_unclean(community, user)
 	from gameplan.restriction_notifications import notify
 
 	frappe.enqueue(
