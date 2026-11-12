@@ -183,9 +183,11 @@ def notify_promotion(community, user, level):
 		to_user=user,
 		from_user=user,
 		team=community,
-		message=_("You are now a {0} in {1}. Your posts need less review.").format(level, title)
+		message=_("You are now a Member of {0}. Your posts publish without approval.").format(title)
 		if level == "Member"
-		else _("You are now a {0} in {1}.").format(level, title),
+		else _("You are now Trusted in {0}. Your posts skip the link, image, file and mention caps.").format(
+			title
+		),
 	).insert(ignore_permissions=True)
 	from gameplan.realtime import notify_notification_counts_refresh
 
