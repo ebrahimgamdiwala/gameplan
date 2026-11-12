@@ -97,7 +97,6 @@ class Moderatable:
 		if doc.doctype == "GP Discussion":
 			values["title"] = "Removed discussion"
 		doc.db_set(values, notify=True)
-		doc._mark_author_unclean()
 		search = GameplanSearch()
 		if search.is_search_enabled() and search.index_exists():
 			frappe.db.after_commit.add(lambda: remove_from_search(doc.doctype, doc.name))
@@ -138,15 +137,6 @@ class Moderatable:
 				frappe.throw("Use the Hide, Delete spam, or Restore action", frappe.PermissionError)
 		if before and is_removed(before):
 			frappe.throw("Restore this content before editing it", frappe.PermissionError)
-
-	def _mark_author_unclean(self):
-		"""Tell the trust level rules that a moderator removed this author's post."""
-		from gameplan.permissions import get_content_project
-		from gameplan.trust_levels import mark_unclean
-
-		project = get_content_project(self)
-		if project:
-			mark_unclean(frappe.db.get_value("GP Project", project, "team"), self.owner)
 
 	def _original_content(self):
 		return frappe.get_last_doc(

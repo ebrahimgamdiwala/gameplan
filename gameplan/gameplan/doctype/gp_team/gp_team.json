@@ -27,10 +27,7 @@
   "section_break_gvbw",
   "readme",
   "approval_post_count",
-  "trust_levels_enabled",
-  "trust_trusted_count",
-  "trust_trusted_days",
-  "trust_clean_days"
+  "approval_min_level"
  ],
  "fields": [
   {
@@ -140,42 +137,19 @@
    "read_only": 1
   },
   {
-   "default": "0",
-   "fieldname": "trust_levels_enabled",
-   "fieldtype": "Check",
+   "fieldname": "approval_min_level",
+   "fieldtype": "Select",
    "hidden": 1,
-   "label": "Trust levels enabled",
-   "read_only": 1
-  },
-  {
-   "default": "25",
-   "fieldname": "trust_trusted_count",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Trusted accepted contributions",
-   "read_only": 1
-  },
-  {
-   "default": "30",
-   "fieldname": "trust_trusted_days",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Trusted days as a member",
-   "read_only": 1
-  },
-  {
-   "default": "90",
-   "fieldname": "trust_clean_days",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Clean record days",
-   "read_only": 1
+   "label": "Approve posts from members below",
+   "options": "\nBasic\nMember",
+   "read_only": 1,
+   "description": "Used instead of the approval post count while trust levels are on."
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-25 21:24:33.681459",
+ "modified": "2026-11-12 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Gameplan",
  "name": "GP Team",

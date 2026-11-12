@@ -273,7 +273,6 @@
                 </template>
               </ApprovalQueue>
               <ReportQueue v-if="tab === 'reports'" :communityId="communityId" />
-              <TrustLevels v-if="tab === 'levels'" :key="communityId" :community-id="communityId" />
               <ModerationHistory v-if="tab === 'history'" :communityId="communityId" />
               <p v-if="loading" role="status" class="mt-4 text-base text-ink-gray-5">Loading…</p>
             </template>
@@ -298,7 +297,6 @@ import ApprovalSettings from '@/components/ApprovalSettings.vue'
 import ReportQueue from '@/components/ReportQueue.vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModerationHistory from '@/components/ModerationHistory.vue'
-import TrustLevels from '@/components/TrustLevels.vue'
 import {
   Avatar,
   Badge,
@@ -333,7 +331,6 @@ const sections = computed(() => [
   ...(canManageCommunity(community.value, useSessionUser())
     ? [{ label: 'Watched words', value: 'words', icon: 'lucide-text-search' }]
     : []),
-  { label: 'Trust levels', value: 'levels', icon: 'lucide-award' },
   { label: 'History', value: 'history', icon: 'lucide-history' },
 ])
 
@@ -349,7 +346,7 @@ const route = useRoute()
 const router = useRouter()
 const tab = computed({
   get: () =>
-    ['approvals', 'reports', 'removed', 'bans', 'words', 'levels', 'history'].includes(
+    ['approvals', 'reports', 'removed', 'bans', 'words', 'history'].includes(
       String(route.query.tab),
     )
       ? String(route.query.tab)
@@ -392,8 +389,6 @@ const sectionDescriptions: Record<string, string> = {
   removed: 'Hidden posts and spam removals. Restoring brings a post back exactly as it was.',
   bans: 'Banned members keep reading access but cannot participate in this Community.',
   words: 'Words and phrases that block, hold, flag or censor posts in this Community.',
-  levels:
-    'Members earn New, Member and Trusted from accepted posts, time in the Community and a clean record. Change or lock a level by hand.',
   history: 'Every moderation action in this Community, newest first.',
 }
 const userQuery = ref('')
@@ -480,10 +475,7 @@ async function load() {
   bans.value = []
   selected.value = ''
   error.value = null
-  if (
-    !canModerate.value ||
-    ['reports', 'approvals', 'history', 'words', 'levels'].includes(tab.value)
-  ) {
+  if (!canModerate.value || ['reports', 'approvals', 'history', 'words'].includes(tab.value)) {
     loading.value = false
     return
   }

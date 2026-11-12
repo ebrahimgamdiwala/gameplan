@@ -14,6 +14,7 @@ from gameplan.gameplan.doctype.gp_member.gp_member import on_doctype_update as a
 from gameplan.gameplan.doctype.gp_notification.gp_notification import (
 	on_doctype_update as add_notification_indexes,
 )
+from gameplan.gameplan.doctype.gp_reaction.gp_reaction import on_doctype_update as add_reaction_indexes
 from gameplan.gameplan.doctype.gp_unread_record.gp_unread_record import add_indexes as add_unread_indexes
 
 
@@ -23,3 +24,4 @@ def execute():
 	add_unread_indexes()
 	add_comment_indexes()
 	add_discussion_indexes()
+	add_reaction_indexes()

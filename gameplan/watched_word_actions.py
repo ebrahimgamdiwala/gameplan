@@ -24,7 +24,7 @@ def check_block(doc):
 		from gameplan.posting_limits import check_caps
 
 		# Content caps share the block check's routes, edit trigger and Community staff exemption.
-		check_caps(doc, community)
+		check_caps(doc)
 		words = matches(community, "Block", doc.get("title"), doc.content)
 		if words:
 			frappe.throw("Remove the blocked words or phrases: " + ", ".join(words), title="Blocked content")

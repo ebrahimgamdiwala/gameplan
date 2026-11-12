@@ -109,18 +109,17 @@ def policy():
 	}
 
 
-def check_caps(doc, community=None):
-	"""Refuse a forum post body over a site content cap. Callers apply the staff exemption.
-
-	A Trusted member of a Community with trust levels on is exempt from these four caps (D65).
-	"""
+def check_caps(doc):
+	"""Refuse a forum post body over a site content cap. Callers apply the staff exemption."""
 	from gameplan.new_user_limits import count_post_contents
-	from gameplan.trust_levels import is_trusted
+	from gameplan.trust_levels import REGULAR, level_of
 
 	config = policy()
 	if not config["caps_enabled"]:
 		return
-	if community and is_trusted(community):
+	level = level_of()
+	if level is not None and level >= REGULAR:
+		# Regulars and Leaders skip the content caps (D116).
 		return
 	counts = count_post_contents(doc.content)
 	for field, (key, singular, plural) in CAPS.items():
@@ -135,8 +134,16 @@ def allowance(kind, *, for_update=False):
 	config = policy()
 	if not config["enabled"] or gameplan.is_admin():
 		return result
+	from gameplan.trust_levels import MEMBER, level_of
+
 	prefix = "discussions" if kind == "discussion" else "replies"
-	limits = [(config[f"{prefix}_hour"], 3600, "hour"), (config[f"{prefix}_day"], 86400, "24 hours")]
+	level = level_of()
+	# Members and above may post twice as often (D116).
+	factor = 2 if level is not None and level >= MEMBER else 1
+	limits = [
+		(config[f"{prefix}_hour"] * factor, 3600, "hour"),
+		(config[f"{prefix}_day"] * factor, 86400, "24 hours"),
+	]
 	maximum = max(count for count, _, _ in limits)
 	if not maximum:
 		return result
