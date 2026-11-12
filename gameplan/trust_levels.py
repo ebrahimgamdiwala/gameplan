@@ -87,7 +87,7 @@ def days_as_member(community, user, now=None):
 
 
 def last_unclean_event(community, user, now=None):
-	"""When a post of this member was last hidden or spam-removed, a report on one was upheld, or they were banned.
+	"""When this member last had a post hidden or spam-removed, a report upheld, or a ban.
 
 	Only used the first time a member's level is worked out; moderation actions keep it current.
 	"""
@@ -464,67 +464,56 @@ def member_levels(community: str, level: str = "", start: int = 0):
 # Nightly job ---------------------------------------------------------------------------------
 
 
-def promote_trusted(after="", budget=TIME_BUDGET):
-	"""Promote members who now meet every Trusted requirement. Runs daily.
+def promote_trusted():
+	"""Daily: queue one job per Community that uses trust levels, to promote members to Trusted."""
+	for community in frappe.get_all("GP Team", filters={"trust_levels_enabled": 1}, pluck="name"):
+		frappe.enqueue(promote_community, queue="long", community=str(community), now=frappe.in_test)
 
-	Only rows with enough accepted contributions are read, in pages, and a long run continues
-	as a new job like the digest does.
+
+def promote_community(community, after="", budget=TIME_BUDGET):
+	"""Promote the members of one Community who now meet every Trusted requirement.
+
+	Reads only rows with enough accepted contributions, through the trust_candidates index.
 	"""
-	started = clock()
-	for community in frappe.get_all(
-		"GP Team", filters={"trust_levels_enabled": 1}, pluck="name", order_by="name asc"
-	):
-		if after and str(community) < after.split("|")[0]:
-			continue
-		cursor = after.split("|")[1] if after and str(community) == after.split("|")[0] else ""
-		config = settings(community)
-		while True:
-			names = frappe.get_all(
-				"GP Approval Counter",
-				filters=[
-					["community", "=", str(community)],
-					["locked", "=", 0],
-					["level", "!=", "Trusted"],
-					["accepted", ">=", config.trusted_count],
-					["name", ">", cursor],
-				],
-				pluck="name",
-				order_by="name asc",
-				limit=JOB_BATCH,
-			)
-			if not names:
-				break
-			for number, name in enumerate(names, 1):
-				cursor = name
-				promote_row(community, name, config)
-				if number % COMMIT_EVERY == 0:
-					frappe.db.commit()  # nosemgrep
-				if clock() - started > budget:
-					frappe.db.commit()  # nosemgrep
-					frappe.enqueue(
-						promote_trusted,
-						queue="long",
-						after=f"{community}|{cursor}",
-						budget=CONTINUATION_BUDGET,
-					)
-					return
-			frappe.db.commit()  # nosemgrep
-		after = ""
+	config = settings(community)
+	if not config.enabled:
+		return
+
+	def candidates(after):
+		return frappe.get_all(
+			"GP Approval Counter",
+			filters=[
+				["community", "=", str(community)],
+				["locked", "=", 0],
+				["level", "!=", "Trusted"],
+				["accepted", ">=", config.trusted_count],
+				["name", ">", after],
+			],
+			pluck="name",
+			order_by="name asc",
+			limit=JOB_BATCH,
+		)
+
+	in_slices(
+		candidates,
+		lambda name: promote_row(community, name, config),
+		lambda after: frappe.enqueue(
+			promote_community, queue="long", community=community, after=after, budget=CONTINUATION_BUDGET
+		),
+		after,
+		budget,
+	)
 
 
 def promote_row(community, name, config):
-	row = frappe.db.get_value(
-		"GP Approval Counter",
-		name,
-		["name", "user", "accepted", "level", "locked", "last_unclean_at"],
-		as_dict=True,
-	)
+	fields = ["name", "user", "accepted", "level", "locked", "last_unclean_at"]
+	row = frappe.db.get_value("GP Approval Counter", name, fields, as_dict=True)
 	if not row or row.locked or can_moderate_community(community, row.user) or is_banned(community, row.user):
 		return
 	level = target_level(config, cint(row.accepted), days_as_member(community, row.user), row.last_unclean_at)
-	if LEVELS.index(level) <= LEVELS.index(row.level or "New"):
-		return
 	previous = row.level or "New"
+	if LEVELS.index(level) <= LEVELS.index(previous):
+		return
 	apply_level(community, row.user, row, level)
 	if level == "Trusted":
 		log_level(community, row.user, "Trusted Promotion", "", previous, level)
@@ -533,33 +522,47 @@ def promote_row(community, name, config):
 def backfill(community, after="", budget=TIME_BUDGET):
 	"""Work out every member's level from their existing contributions after the switch goes on (D74).
 
-	Chunked and resumable: a long run continues as a new job from the last member it handled.
 	Nobody is told, and staff are skipped. Until it finishes, rows are worked out as they are read.
 	"""
-	started = clock()
 	config = settings(community)
 	if not config.enabled:
 		return
-	while True:
-		users = frappe.get_all(
-			"GP Member",
-			filters={"parent": str(community), "parenttype": "GP Team", "user": [">", after]},
-			pluck="user",
-			order_by="user asc",
-			limit=JOB_BATCH,
+
+	def members(after):
+		filters = {"parent": str(community), "parenttype": "GP Team", "user": [">", after]}
+		return frappe.get_all(
+			"GP Member", filters=filters, pluck="user", order_by="user asc", limit=JOB_BATCH
 		)
-		if not users:
-			return
-		for number, user in enumerate(users, 1):
-			after = user
-			if not can_moderate_community(community, user):
-				evaluate(community, user, target_row(community, user), config)
+
+	def work_out(user):
+		if not can_moderate_community(community, user):
+			evaluate(community, user, target_row(community, user), config)
+
+	in_slices(
+		members,
+		work_out,
+		lambda after: frappe.enqueue(
+			backfill, queue="long", community=str(community), after=after, budget=CONTINUATION_BUDGET
+		),
+		after,
+		budget,
+	)
+
+
+def in_slices(fetch, handle, resume, after, budget):
+	"""Handle each key `fetch(after)` returns, a page at a time, committing as it goes.
+
+	After `budget` seconds it commits, calls `resume(last key)` to queue the rest as a new job, and stops.
+	"""
+	started = clock()
+	while keys := fetch(after):
+		for number, key in enumerate(keys, 1):
+			after = key
+			handle(key)
 			if number % COMMIT_EVERY == 0:
 				frappe.db.commit()  # nosemgrep
 			if clock() - started > budget:
 				frappe.db.commit()  # nosemgrep
-				frappe.enqueue(
-					backfill, queue="long", community=str(community), after=after, budget=CONTINUATION_BUDGET
-				)
+				resume(after)
 				return
 		frappe.db.commit()  # nosemgrep
