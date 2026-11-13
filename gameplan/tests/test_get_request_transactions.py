@@ -71,6 +71,7 @@ READ_ONLY_ENDPOINTS = frozenset(
 		"gameplan.approvals.detail",
 		"gameplan.approval_policy.get_policy",
 		"gameplan.trust_levels.get_settings",
+		"gameplan.approval_policy.get_level_policy",
 		"gameplan.reporting.detail",
 		"gameplan.moderation_history.history",
 		"gameplan.slow_mode.status",
