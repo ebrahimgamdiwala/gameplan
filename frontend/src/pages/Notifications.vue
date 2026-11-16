@@ -396,7 +396,10 @@ function shortTimestamp(timestamp: string) {
 }
 
 function showAvatar(notification: NotificationRow) {
-  return Boolean(notification.from_user && !['Reaction', 'Trust Level', 'Moderation'].includes(notification.type))
+  return Boolean(
+    notification.from_user &&
+    !['Reaction', 'Trust Level', 'Moderation'].includes(notification.type),
+  )
 }
 
 function confirmMarkAllAsRead() {
