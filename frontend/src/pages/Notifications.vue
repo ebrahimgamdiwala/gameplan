@@ -317,6 +317,7 @@ function notificationRoute(notification: NotificationRow): RouteLocationRaw | nu
 function notificationIcon(notification: NotificationRow) {
   if (notification.type === 'Rich Quote') return 'lucide-text-quote'
   if (notification.type === 'Trust Level') return 'lucide-award'
+  if (notification.type === 'Moderation') return 'lucide-shield'
   return 'lucide-at-sign'
 }
 
@@ -395,7 +396,7 @@ function shortTimestamp(timestamp: string) {
 }
 
 function showAvatar(notification: NotificationRow) {
-  return Boolean(notification.from_user && !['Reaction', 'Trust Level'].includes(notification.type))
+  return Boolean(notification.from_user && !['Reaction', 'Trust Level', 'Moderation'].includes(notification.type))
 }
 
 function confirmMarkAllAsRead() {

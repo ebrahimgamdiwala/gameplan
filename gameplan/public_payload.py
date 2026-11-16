@@ -62,6 +62,7 @@ PUBLIC_FIELDS = {
 		"pinned_at",
 		"pin_scope",
 		"hidden_at",
+		"auto_hidden",
 		"spam_removed_at",
 	},
 	"GP Comment": {
@@ -71,6 +72,7 @@ PUBLIC_FIELDS = {
 		"edited_at",
 		"deleted_at",
 		"hidden_at",
+		"auto_hidden",
 		"spam_removed_at",
 	},
 	"GP Poll": {

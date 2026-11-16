@@ -38,7 +38,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "Mention\nReaction\nRich Quote\nTrust Level",
+   "options": "Mention\nReaction\nRich Quote\nTrust Level\nModeration",
    "reqd": 1
   },
   {
@@ -93,7 +93,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-31 10:15:00.000000",
+ "modified": "2026-11-16 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Gameplan",
  "name": "GP Notification",

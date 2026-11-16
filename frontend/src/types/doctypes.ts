@@ -129,7 +129,7 @@ export interface GPNotification extends DocType {
   /** To User: Link (User) */
   to_user: string
   /** Type: Select */
-  type: 'Mention' | 'Reaction' | 'Rich Quote' | 'Trust Level'
+  type: 'Mention' | 'Reaction' | 'Rich Quote' | 'Trust Level' | 'Moderation'
   /** Message: Text Editor */
   message?: string
   /** Read: Check */
@@ -151,6 +151,7 @@ export interface GPNotification extends DocType {
 // Last updated: 2026-10-16 20:00:00.000000
 export interface GPDiscussion extends DocType {
   hidden_at?: string
+  auto_hidden?: 0 | 1
   spam_removed_at?: string
   /** Project: Link (GP Project) */
   project: string
@@ -310,6 +311,7 @@ export interface GPComment extends DocType {
   deleted_at?: string
   /** Hidden At: Datetime */
   hidden_at?: string
+  auto_hidden?: 0 | 1
   spam_removed_at?: string
   /** Tags: Table (GP Tag Link) */
   tags: GPTagLink[]
