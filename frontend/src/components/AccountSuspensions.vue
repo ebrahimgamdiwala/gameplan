@@ -27,17 +27,6 @@
           <template #item-prefix="{ item }"
             ><Avatar :image="item.image" :label="item.label" size="sm"
           /></template>
-          <template #footer>
-            <Button
-              v-if="candidateCursor"
-              variant="ghost"
-              class="w-full"
-              :loading="searching"
-              @click="search(candidateCursor)"
-            >
-              Load more users
-            </Button>
-          </template>
         </Combobox>
         <Button :disabled="!chosen" @click="edit({ user: chosen })">Restrict account</Button>
         <Button v-if="chosen" @click="cleanupOpen = true">Remove all posts</Button>
