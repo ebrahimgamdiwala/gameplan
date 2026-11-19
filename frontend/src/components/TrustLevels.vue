@@ -1,7 +1,7 @@
 <template>
   <p class="pb-5 text-p-base text-ink-gray-6">
-    Every member has one level across the site. Members earn New, Basic, Contributor and Regular from
-    visits, discussions entered, reactions and replies. Change or lock a level by hand.
+    Every member has one level across the site. Members earn New, Basic, Contributor and Regular
+    from visits, discussions entered, reactions and replies. Change or lock a level by hand.
   </p>
   <div class="flex flex-wrap items-center justify-between gap-3 pb-3">
     <!-- Seven filters are wider than a phone, so the strip scrolls on its own. -->
