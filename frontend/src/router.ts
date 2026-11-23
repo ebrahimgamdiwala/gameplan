@@ -9,7 +9,7 @@ import {
 import { until } from '@vueuse/core'
 import { call } from 'frappe-ui'
 import { session } from './data/session'
-import { useSessionUser, users, usersReady } from './data/users'
+import { isSessionUserSettled, useSessionUser, users, usersReady } from './data/users'
 import { isGlobalAdmin } from './utils/permissions'
 import { communities, getCommunity } from './data/communities'
 import { spaces, getSpace, fetchSpace } from './data/spaces'
@@ -1128,11 +1128,10 @@ async function ensureCommunityDataLoaded() {
   await Promise.all([waitForResource(communities), waitForResource(spaces)])
   // The first user request can settle before its rows reach the user store. Until they do,
   // the signed-in user is a placeholder with no role, so a guest would look like a member
-  // who joined nothing and be sent to NoCommunities.
+  // who joined nothing and be sent to NoCommunities. Stop at the reply, not the record:
+  // someone without a Gameplan role, like Administrator, is never in it.
   if (session.isLoggedIn) {
-    await until(() => !useSessionUser().isPlaceholder || Boolean(users.error)).toBe(true, {
-      timeout: 5000,
-    })
+    await until(isSessionUserSettled).toBe(true, { timeout: 5000 })
   }
   if (isAnonymousVisitor()) {
     await until(() => !communities.hasNextPage || Boolean(communities.error)).toBe(true)

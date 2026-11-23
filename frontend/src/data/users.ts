@@ -126,6 +126,7 @@ export let users = useCall<UserInfo[], { user: string | null }>({
     for (let user of data) {
       mergeUserInfo(user)
     }
+    sessionUserReplied.value = true
     return data
   },
   onError(error) {
@@ -138,6 +139,17 @@ export let users = useCall<UserInfo[], { user: string | null }>({
 })
 
 const firstFetchSettled = ref(false)
+// Set when a reply lands, after its rows are merged. `users.isFinished` can turn true first.
+const sessionUserReplied = ref(false)
+
+/**
+ * True once the signed-in user's record is in the store, or will not come: the request
+ * failed, or its reply did not include them. Administrator has no Gameplan role, so
+ * `get_user_info` never returns them and they stay a placeholder.
+ */
+export function isSessionUserSettled() {
+  return !useSessionUser().isPlaceholder || Boolean(users.error) || sessionUserReplied.value
+}
 
 /**
  * True once the first `get_user_info` request has SETTLED — succeeded or failed — and
