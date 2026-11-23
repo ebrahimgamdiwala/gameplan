@@ -75,8 +75,7 @@ export const SETTING_GROUPS: { title: string; sections: SettingSection[] }[] = [
       },
       {
         title: 'Consecutive replies',
-        description:
-          'Maximum replies a new member can post in a discussion before someone else responds. Discussions they created have no limit',
+        description: 'Replies in a row until someone else responds. Own discussions are exempt',
         fields: [['new_replies_per_discussion', 'Maximum replies']],
       },
       {
