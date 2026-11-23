@@ -11,17 +11,21 @@ from frappe.search.sqlite_search import MAX_SEARCH_RESULTS
 
 import gameplan
 from gameplan.public_access import public_access_enabled
-from gameplan.public_payload import handles_for
+from gameplan.public_payload import handles_for, looks_like_user_id, public_profiles
 from gameplan.search_sqlite import GameplanSearch, content_fingerprint
 from gameplan.visibility import anonymous_readable_criterion
 
 PUBLIC_SEARCH_DOCTYPES = ("GP Discussion", "GP Comment")
-PUBLIC_SEARCH_FILTERS = frozenset({"project", "team", "doctype"})
-SEARCH_FILTERS = PUBLIC_SEARCH_FILTERS | {"owner", "tags"}
+PUBLIC_SEARCH_FILTERS = frozenset({"project", "team", "doctype", "owner", "tags"})
+SEARCH_FILTERS = PUBLIC_SEARCH_FILTERS
 MAX_QUERY_LENGTH = 200
 MAX_QUERY_WORDS = 12
 MAX_FILTER_VALUES = 20
 MAX_PUBLIC_RESULTS = 50
+MAX_AUTHOR_CANDIDATES = 100
+MAX_AUTHOR_RESULTS = 20
+PUBLIC_TAGS_CACHE_KEY = "gameplan:public-search-tags"
+PUBLIC_TAGS_CACHE_SECONDS = 300
 
 
 class PublicGameplanSearch(GameplanSearch):
@@ -35,7 +39,19 @@ class PublicGameplanSearch(GameplanSearch):
 		require_public_search()
 
 	def validate_filters(self, filters):
-		return validate_search_filters(filters, anonymous=True)
+		filters = validate_search_filters(filters, anonymous=True)
+		if any(looks_like_user_id(owner) for owner in filters.get("owner", [])):
+			frappe.throw("Use profile handles to filter authors.", frappe.PermissionError)
+		return filters
+
+	def resolve_owners(self, filters):
+		from gameplan.guest_payload import users_for_handles
+
+		owners = filters.get("owner")
+		if not owners:
+			return filters
+		users = users_for_handles(owners)
+		return {**filters, "owner": [users.get(owner, owner) for owner in owners]}
 
 	def space_criterion(self, Project):
 		return (Project.is_anonymous_readable == 1) & anonymous_readable_criterion(Project)
@@ -52,7 +68,7 @@ class PublicGameplanSearch(GameplanSearch):
 			return self._empty_search_result(title_only, filters)
 
 		effective_filters = {
-			**filters,
+			**self.resolve_owners(filters),
 			"doctype": [
 				doctype
 				for doctype in filters.get("doctype", self.SEARCH_DOCTYPES)
@@ -81,7 +97,32 @@ class PublicGameplanSearch(GameplanSearch):
 		options["projects"] = {str(space.name): 0 for space in spaces}
 		options["teams"] = {space.team: 0 for space in spaces}
 		options["doctypes"] = {doctype: 0 for doctype in self.SEARCH_DOCTYPES}
+		if gameplan.is_anonymous():
+			options["tags"] = self.public_tags()
 		return options
+
+	def public_tags(self):
+		cached = frappe.cache.get_value(PUBLIC_TAGS_CACHE_KEY)
+		if cached is not None:
+			return cached
+		Tag = frappe.qb.DocType("GP Tag Link")
+		labels = set()
+		for doctype in self.SEARCH_DOCTYPES:
+			for query, Content, _Project in self.live_queries(doctype):
+				labels.update(
+					query.join(Tag)
+					.on(
+						(Tag.parenttype == doctype)
+						& (Tag.parent == Content.name)
+						& (Tag.parentfield == "tags")
+					)
+					.select(Tag.label)
+					.distinct()
+					.run(pluck=True)
+				)
+		tags = {label: 0 for label in sorted(labels) if label}
+		frappe.cache.set_value(PUBLIC_TAGS_CACHE_KEY, tags, expires_in_sec=PUBLIC_TAGS_CACHE_SECONDS)
+		return tags
 
 	def get_author_counts(self, authors):
 		return {}
@@ -279,6 +320,24 @@ def search_for_viewer():
 def require_public_search():
 	if not public_access_enabled():
 		frappe.throw("Not permitted", frappe.PermissionError)
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def authors(query: str = ""):
+	"""Find people credited on public posts by name or handle, for the logged-out author filter."""
+	require_public_search()
+	query = query.strip() if isinstance(query, str) else ""
+	if len(query) < 2 or len(query) > 140:
+		return []
+	pattern = "%{}%".format(query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"))
+	handles = frappe.get_all(
+		"GP User Profile",
+		filters={"enabled": 1},
+		or_filters={"full_name": ["like", pattern], "name": ["like", pattern]},
+		pluck="name",
+		limit=MAX_AUTHOR_CANDIDATES,
+	)
+	return public_profiles(handles)[:MAX_AUTHOR_RESULTS]
 
 
 def validate_search_filters(filters, *, anonymous=False, bounded=False):

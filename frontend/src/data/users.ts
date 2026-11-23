@@ -259,7 +259,9 @@ export function useUserSearch(params: () => UserSearchParams | null, wait = 250)
 
   async function run(current: number, value: UserSearchParams) {
     try {
-      const rows = await searchUsers(value)
+      const rows = isAnonymousVisitor()
+        ? await searchPublicAuthors(value.query || '')
+        : await searchUsers(value)
       if (current === request) results.value = rows
     } catch (error) {
       if (current === request) results.value = []
@@ -363,20 +365,31 @@ async function fetchPublicProfiles() {
   if (pendingHandles.size) publicProfileTimer ??= window.setTimeout(fetchPublicProfiles, 0)
 }
 
+function applyPublicProfiles(profiles: PublicProfile[]) {
+  return profiles.map((profile) => {
+    requestedHandles.add(profile.handle)
+    return Object.assign(usersByName[profile.handle] ?? useUser(profile.handle), {
+      full_name: profile.full_name,
+      user_image: profile.image || '',
+      image_background_color: profile.image_background_color || '',
+      is_image_background_removed: profile.is_image_background_removed || 0,
+      user_profile: profile.handle,
+      enabled: 1,
+      isPlaceholder: false,
+    })
+  })
+}
+
+async function searchPublicAuthors(query: string) {
+  const profiles = await call<PublicProfile[]>('gameplan.public_search.authors', { query })
+  return applyPublicProfiles(profiles)
+}
+
 async function fetchPublicProfileBatch(handles: string[]) {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const profiles = await call<PublicProfile[]>('gameplan.api.get_public_user_info', { handles })
-      for (const profile of profiles) {
-        Object.assign(usersByName[profile.handle] ?? useUser(profile.handle), {
-          full_name: profile.full_name,
-          user_image: profile.image || '',
-          image_background_color: profile.image_background_color || '',
-          is_image_background_removed: profile.is_image_background_removed || 0,
-          user_profile: profile.handle,
-          isPlaceholder: false,
-        })
-      }
+      applyPublicProfiles(profiles)
       return
     } catch (error) {
       if (attempt === 2) {

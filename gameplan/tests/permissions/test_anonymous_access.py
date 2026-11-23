@@ -38,7 +38,8 @@ GUEST_REACHABLE_ENDPOINTS = {
 		"readable thread only; reaction totals without account identities"
 	),
 	"gameplan.api.search_sqlite": "public discussions and comments only, with live guards and safe metadata",
-	"gameplan.api.get_search_filter_options": "public space/community facets only, without authors or counts",
+	"gameplan.api.get_search_filter_options": "public space, community and tag facets, no authors or counts",
+	"gameplan.public_search.authors": "handle, name and avatar of people credited on public posts only",
 	"gameplan.api.get_user_info": "throws AuthenticationError for an anonymous caller first",
 	"gameplan.api.accept_invitation": "invitation email link, opened by a plain browser navigation",
 	"gameplan.email_digest.open_digest_preferences": "digest email link; signs the user in",

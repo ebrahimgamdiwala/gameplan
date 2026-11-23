@@ -73,7 +73,6 @@
             <div class="flex gap-2 items-center">
               <!-- Authors Filter -->
               <MultiSelect
-                v-if="!publicVisitor"
                 :options="authorOptions"
                 v-model:query="filterQueries.owner"
                 :filterable="false"
@@ -196,7 +195,6 @@
 
               <!-- Tags Filter -->
               <MultiSelect
-                v-if="!publicVisitor"
                 variant="outline"
                 :options="tagOptions"
                 v-model:query="filterQueries.tags"

@@ -48,6 +48,7 @@ def refuse_generic_routes_for_anonymous():
 ANONYMOUS_RATE_LIMITS = {
 	"gameplan.api.search_sqlite": 30,
 	"gameplan.api.get_search_filter_options": 30,
+	"gameplan.public_search.authors": 60,
 	"gameplan.gameplan.doctype.gp_discussion.api.get_discussions": 60,
 	"gameplan.public_lists.communities": 60,
 	"gameplan.public_lists.spaces": 60,

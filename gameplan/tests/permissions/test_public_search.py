@@ -10,7 +10,13 @@ import frappe
 
 from gameplan.api import get_search_filter_options, search_sqlite
 from gameplan.public_access import ANONYMOUS_RATE_LIMITS
-from gameplan.public_search import MAX_PUBLIC_RESULTS, PublicGameplanSearch, highlight_text
+from gameplan.public_search import (
+	MAX_PUBLIC_RESULTS,
+	PUBLIC_TAGS_CACHE_KEY,
+	PublicGameplanSearch,
+	highlight_text,
+)
+from gameplan.public_search import authors as public_authors
 from gameplan.search_sqlite import GameplanSearch
 from gameplan.tests.base import GameplanTestCase
 from gameplan.tests.fixtures import (
@@ -56,6 +62,7 @@ class TestPublicSearch(IsolatedSearchIndex, GameplanTestCase):
 			reference_name=self.task.name,
 			content="forumneedle task reply",
 		).insert(ignore_permissions=True)
+		frappe.cache.delete_value(PUBLIC_TAGS_CACHE_KEY)
 		self.search = PublicGameplanSearch()
 		self.search.drop_index()
 		# Index this test's corpus only, not unrelated records left on the disposable site.
@@ -154,10 +161,59 @@ class TestPublicSearch(IsolatedSearchIndex, GameplanTestCase):
 		response = self.anonymous_search(filters={"doctype": ["GP Comment"]})
 		self.assertEqual(self.result_ids(response), {f"GP Comment:{self.comment.name}"})
 
-	def test_author_and_arbitrary_sql_filters_are_refused(self):
-		for field in ("owner", "author", "tags", "project) OR 1=1 --"):
+	def test_author_emails_and_arbitrary_sql_filters_are_refused(self):
+		for field in ("owner", "author", "project) OR 1=1 --"):
 			with self.subTest(field=field), self.assertRaises(frappe.PermissionError):
 				self.anonymous_search(filters={field: [self.member.name]})
+
+	def test_anonymous_author_filter_takes_handles_and_never_returns_emails(self):
+		handle = frappe.db.get_value("GP User Profile", {"user": self.member.name}, "name")
+		response = self.anonymous_search(filters={"owner": [handle]})
+		self.assertIn(f"GP Discussion:{self.public_discussion.name}", self.result_ids(response))
+		self.assertEqual(response["summary"]["applied_filters"]["owner"], [handle])
+		self.assertNotIn(self.member.name, json.dumps(response))
+		self.assertEqual(self.anonymous_search(filters={"owner": ["no-such-handle"]})["results"], [])
+
+	def test_anonymous_tags_list_only_public_tags_and_filter_results(self):
+		private = self.spaces[(VISIBILITY_MEMBER_ACCESS, VISIBILITY_MEMBER_ACCESS)]
+		tagged = create_discussion(
+			"forumneedle tagged",
+			self.public_space,
+			content='<p>forumneedle</p><span class="tag-item" data-tag-label="publictag">#publictag</span>',
+			owner=self.member,
+		)
+		hidden = create_discussion(
+			"forumneedle private tagged",
+			private,
+			content='<p>forumneedle</p><span class="tag-item" data-tag-label="privatetag">#privatetag</span>',
+			owner=self.member,
+		)
+		self.search._index_documents([self.search.prepare_document(doc) for doc in (tagged, hidden)])
+		frappe.cache.delete_value(PUBLIC_TAGS_CACHE_KEY)
+		with self.as_user("Guest"):
+			options = get_search_filter_options()
+		self.assertIn("publictag", options["tags"])
+		self.assertNotIn("privatetag", options["tags"])
+		response = self.anonymous_search(filters={"tags": ["publictag"]})
+		self.assertEqual(self.result_ids(response), {f"GP Discussion:{tagged.name}"})
+		self.assertEqual(self.anonymous_search(filters={"tags": ["privatetag"]})["results"], [])
+
+	def test_author_search_finds_public_authors_only_by_handle(self):
+		private = self.spaces[(VISIBILITY_MEMBER_ACCESS, VISIBILITY_MEMBER_ACCESS)]
+		create_discussion("forumneedle private only", private, owner=self.second_member)
+		public = frappe.db.get_value("GP User Profile", {"user": self.member.name}, ["name", "full_name"])
+		hidden = frappe.db.get_value(
+			"GP User Profile", {"user": self.second_member.name}, ["name", "full_name"]
+		)
+		with self.as_user("Guest"):
+			found = public_authors(public[1])
+			missed = public_authors(hidden[1])
+			too_short = public_authors("a")
+		self.assertIn(public[0], [row["handle"] for row in found])
+		self.assertNotIn(hidden[0], [row["handle"] for row in missed])
+		self.assertEqual(too_short, [])
+		self.assertNotIn(self.member.name, json.dumps(found))
+		self.assertNotIn("user", found[0])
 
 	def test_malformed_and_large_filters_are_refused(self):
 		for filters in (
