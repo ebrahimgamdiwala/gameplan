@@ -86,8 +86,14 @@
         target="_self"
       />
     </div>
-    <div v-if="readOnlyMode && isAnonymousVisitor()" class="mb-20">
-      <PublicJoinPrompt :title="closed ? 'Follow this community' : 'Join the conversation'" />
+    <div
+      v-if="readOnlyMode && isAnonymousVisitor()"
+      ref="addComment"
+      class="fixed bottom-0 left-0 right-0 z-[2] w-full print:hidden sm:left-[274px] sm:right-1 sm:w-auto"
+    >
+      <div class="discussion-container bg-surface-base py-3">
+        <PublicJoinPrompt :title="closed ? 'Follow this community' : 'Join the conversation'" />
+      </div>
     </div>
 
     <!-- In an installed PWA the collapsed button clears the home indicator: the 1rem
