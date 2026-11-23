@@ -183,29 +183,6 @@ const shortcuts = computed<RailShortcut[]>(() => [
         },
       ]
     : []),
-  ...(canModerateAny.value
-    ? [
-        {
-          label: 'Moderation',
-          icon: 'lucide-shield-check',
-          isActive: isRoute('Moderation'),
-          route: { name: 'Moderation' },
-          unreadCount: moderationAttention.value ? 1 : 0,
-          badgeStyle: 'dot' as const,
-          description: moderationAttention.value ? 'Needs your attention' : undefined,
-        },
-      ]
-    : []),
-  ...(isGlobalAdmin(sessionUser)
-    ? [
-        {
-          label: 'Admin settings',
-          icon: 'lucide-monitor-cog',
-          isActive: isRoute('AdminSettings'),
-          route: { name: 'AdminSettings' },
-        },
-      ]
-    : []),
   ...(currentShowAllDiscussions.value ? [allDiscussionsShortcut.value] : []),
   {
     label: 'People',
@@ -245,6 +222,29 @@ const shortcuts = computed<RailShortcut[]>(() => [
     route: { name: 'Drafts' },
     description: countLabel(draftCount.value, 'draft'),
   },
+  ...(canModerateAny.value
+    ? [
+        {
+          label: 'Moderation',
+          icon: 'lucide-shield-check',
+          isActive: isRoute('Moderation'),
+          route: { name: 'Moderation' },
+          unreadCount: moderationAttention.value ? 1 : 0,
+          badgeStyle: 'dot' as const,
+          description: moderationAttention.value ? 'Needs your attention' : undefined,
+        },
+      ]
+    : []),
+  ...(isGlobalAdmin(sessionUser)
+    ? [
+        {
+          label: 'Admin settings',
+          icon: 'lucide-monitor-cog',
+          isActive: isRoute('AdminSettings'),
+          route: { name: 'AdminSettings' },
+        },
+      ]
+    : []),
 ])
 
 const visibleShortcuts = computed(() =>
