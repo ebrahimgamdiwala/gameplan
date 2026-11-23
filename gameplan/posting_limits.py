@@ -11,6 +11,8 @@ from gameplan.api import require_admin
 from gameplan.approval_files import publishing_submission
 
 FIELDS = ("discussions_hour", "discussions_day", "replies_hour", "replies_day")
+# Daily limits on reactions, edits and reports (D137), enforced in action_limits.
+DAILY = ("reactions_day", "edits_day", "reports_day")
 # Cap field: (count_post_contents key, singular, plural).
 CAPS = {
 	"max_links": ("links", "link", "links"),
@@ -40,6 +42,10 @@ def save_settings(
 	max_images: int = 20,
 	max_attachments: int = 10,
 	max_mentions: int = 10,
+	daily_enabled: int = 0,
+	reactions_day: int = 50,
+	edits_day: int = 30,
+	reports_day: int = 20,
 ):
 	"""Save the global-admin posting policy and content caps, with zero disabling an individual limit."""
 	require_admin()
@@ -56,6 +62,10 @@ def save_settings(
 			max_images=max_images,
 			max_attachments=max_attachments,
 			max_mentions=max_mentions,
+			daily_enabled=daily_enabled,
+			reactions_day=reactions_day,
+			edits_day=edits_day,
+			reports_day=reports_day,
 		)
 	)
 	doc.save()
@@ -105,7 +115,8 @@ def policy():
 	return {
 		"enabled": cint(doc.enabled),
 		"caps_enabled": cint(doc.caps_enabled),
-		**{key: cint(doc.get(key)) for key in (*FIELDS, *CAPS)},
+		"daily_enabled": cint(doc.daily_enabled),
+		**{key: cint(doc.get(key)) for key in (*FIELDS, *CAPS, *DAILY)},
 	}
 
 

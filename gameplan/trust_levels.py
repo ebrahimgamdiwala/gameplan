@@ -13,7 +13,7 @@ from datetime import timedelta
 import frappe
 from frappe import _
 from frappe.query_builder import functions as fn
-from frappe.utils import cint, get_datetime
+from frappe.utils import cint, flt, get_datetime
 
 import gameplan
 from gameplan.api import require_admin
@@ -21,7 +21,13 @@ from gameplan.restrictions import active_condition, utc_now
 
 LEVELS = ("New", "Basic", "Contributor", "Regular", "Leader")
 NEW, BASIC, CONTRIBUTOR, REGULAR, LEADER = range(5)
-LEVEL_ACTIONS = ("Level Changed", "Level Locked", "Level Unlocked", "Regular Promotion", "Regular Demotion")
+LEVEL_ACTIONS = (
+	"Level Changed",
+	"Level Locked",
+	"Level Unlocked",
+	"Regular Promotion",
+	"Regular Demotion",
+)
 REMOVAL_ACTIONS = ("Ban", "Suspend", "Silence")
 # Setting: (default, smallest, largest).
 REQUIREMENTS = {
@@ -58,7 +64,14 @@ LIMITS = {
 	"basic_first_day_discussions": (6, 0, 1000),
 	"basic_first_day_replies": (30, 0, 1000),
 }
+# How many times the daily reaction, edit and report limits each level gets (D137).
+MULTIPLIERS = {
+	"contributor_daily_multiplier": (1.5, 1, 5),
+	"regular_daily_multiplier": (2, 1, 5),
+	"leader_daily_multiplier": (3, 1, 5),
+}
 SETTINGS = {**REQUIREMENTS, **LIMITS}
+ALL_SETTINGS = {**SETTINGS, **MULTIPLIERS}
 JOB_BATCH = 500
 COMMIT_EVERY = 50
 TIME_BUDGET = 240
@@ -81,6 +94,10 @@ def config():
 		**{
 			field: default if doc.get(field) is None else cint(doc.get(field))
 			for field, (default, _, _) in SETTINGS.items()
+		},
+		**{
+			field: default if doc.get(field) is None else flt(doc.get(field), 1)
+			for field, (default, _, _) in MULTIPLIERS.items()
 		},
 	)
 
@@ -516,8 +533,8 @@ def get_settings():
 	require_admin()
 	return {
 		**config(),
-		"defaults": {field: default for field, (default, _, _) in SETTINGS.items()},
-		"ranges": {field: [smallest, largest] for field, (_, smallest, largest) in SETTINGS.items()},
+		"defaults": {field: default for field, (default, _, _) in ALL_SETTINGS.items()},
+		"ranges": {field: [smallest, largest] for field, (_, smallest, largest) in ALL_SETTINGS.items()},
 	}
 
 
@@ -527,10 +544,10 @@ def save_settings(enabled: int, **values):
 	require_admin()
 	doc = frappe.get_doc("GP Trust Settings")
 	was_enabled = cint(doc.enabled)
-	for field, (_default, smallest, largest) in SETTINGS.items():
+	for field, (_default, smallest, largest) in ALL_SETTINGS.items():
 		if field not in values:
 			continue
-		value = cint(values[field])
+		value = flt(values[field], 1) if field in MULTIPLIERS else cint(values[field])
 		if not smallest <= value <= largest:
 			frappe.throw(
 				_("{0} must be between {1} and {2}").format(_(doc.meta.get_label(field)), smallest, largest)
@@ -539,6 +556,7 @@ def save_settings(enabled: int, **values):
 	if cint(doc.regular_days) > cint(doc.regular_window):
 		frappe.throw(_("Days visited cannot be more than the Regular window"))
 	check_first_day_quotas(doc)
+	check_multipliers(doc)
 	doc.enabled = 1 if cint(enabled) else 0
 	doc.save(ignore_permissions=True)
 	if doc.enabled and not was_enabled:
@@ -559,6 +577,13 @@ def check_first_day_quotas(doc):
 					basic, _(what), new
 				)
 			)
+
+
+def check_multipliers(doc):
+	"""A promotion must never lower a daily limit (D137)."""
+	values = [flt(doc.get(field), 1) for field in MULTIPLIERS]
+	if values != sorted(values):
+		frappe.throw(_("Each level's daily limits multiplier must be at least the level below's"))
 
 
 # Manual changes -------------------------------------------------------------------------------

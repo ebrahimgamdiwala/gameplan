@@ -216,6 +216,7 @@ doc_events = {
 		"before_insert": ["gameplan.approval_policy.guard_publication", "gameplan.posting_limits.record"],
 		"validate": [
 			"gameplan.new_user_limits.check_new_user_limits",
+			"gameplan.action_limits.check_edit",
 			"gameplan.slow_mode.protect_settings",
 			"gameplan.watched_word_actions.validate",
 			"gameplan.site_settings.check_post",
@@ -246,6 +247,7 @@ doc_events = {
 		],
 		"validate": [
 			"gameplan.new_user_limits.check_new_user_limits",
+			"gameplan.action_limits.check_edit",
 			"gameplan.reporting.protect_pending_reviews",
 			"gameplan.watched_word_actions.validate",
 			"gameplan.site_settings.check_post",
@@ -258,13 +260,18 @@ doc_events = {
 		"after_delete": "gameplan.activity_counts.refresh_owner_counts",
 	},
 	"GP Reaction": {
+		"before_insert": "gameplan.action_limits.check_reaction",
 		"after_insert": "gameplan.badges.on_reaction_change",
 		"on_trash": "gameplan.badges.on_reaction_change",
 	},
 	"GP User Profile": {"on_update": "gameplan.badges.on_profile_change"},
 	"GP Discussion Visit": {"on_update": "gameplan.badges.on_discussion_visit"},
 	"GP Poll": {
-		"validate": ["gameplan.new_user_limits.check_new_user_limits", "gameplan.site_settings.check_poll"],
+		"validate": [
+			"gameplan.new_user_limits.check_new_user_limits",
+			"gameplan.action_limits.check_edit",
+			"gameplan.site_settings.check_poll",
+		],
 		"after_insert": "gameplan.new_user_limits.record_first_day_post",
 	},
 	"User": {

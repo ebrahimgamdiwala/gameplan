@@ -38,7 +38,11 @@
   "new_max_mentions",
   "basic_limits_section",
   "basic_first_day_discussions",
-  "basic_first_day_replies"
+  "basic_first_day_replies",
+  "daily_limits_section",
+  "contributor_daily_multiplier",
+  "regular_daily_multiplier",
+  "leader_daily_multiplier"
  ],
  "fields": [
   {
@@ -267,11 +271,37 @@
    "label": "Basic: replies on the first day",
    "default": "30",
    "non_negative": 1
+  },
+  {
+   "fieldname": "daily_limits_section",
+   "fieldtype": "Section Break",
+   "label": "Daily action limits"
+  },
+  {
+   "fieldname": "contributor_daily_multiplier",
+   "fieldtype": "Float",
+   "label": "Contributor: daily reactions, edits and reports",
+   "default": "1.5",
+   "precision": "1"
+  },
+  {
+   "fieldname": "regular_daily_multiplier",
+   "fieldtype": "Float",
+   "label": "Regular: daily reactions, edits and reports",
+   "default": "2",
+   "precision": "1"
+  },
+  {
+   "fieldname": "leader_daily_multiplier",
+   "fieldtype": "Float",
+   "label": "Leader: daily reactions, edits and reports",
+   "default": "3",
+   "precision": "1"
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-20 12:00:00.000000",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Gameplan",
  "name": "GP Trust Settings",

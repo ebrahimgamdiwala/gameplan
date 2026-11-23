@@ -49,6 +49,7 @@
               :unsaved="unsaved.includes(trustPrefix + field)"
               field
               type="number"
+              :step="field.endsWith('_multiplier') ? 0.1 : 1"
               :min="ranges[field]?.[0]"
               :max="ranges[field]?.[1]"
             />

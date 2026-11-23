@@ -17,7 +17,12 @@
   "max_links",
   "max_images",
   "max_attachments",
-  "max_mentions"
+  "max_mentions",
+  "daily_section",
+  "daily_enabled",
+  "reactions_day",
+  "edits_day",
+  "reports_day"
  ],
  "fields": [
   {
@@ -84,13 +89,45 @@
    "fieldname": "max_mentions",
    "fieldtype": "Int",
    "label": "Mentions per post"
+  },
+  {
+   "fieldname": "daily_section",
+   "fieldtype": "Section Break",
+   "label": "Daily action limits"
+  },
+  {
+   "default": "0",
+   "fieldname": "daily_enabled",
+   "fieldtype": "Check",
+   "label": "Enable daily action limits"
+  },
+  {
+   "default": "50",
+   "fieldname": "reactions_day",
+   "fieldtype": "Int",
+   "label": "Reactions per 24 hours",
+   "non_negative": 1
+  },
+  {
+   "default": "30",
+   "fieldname": "edits_day",
+   "fieldtype": "Int",
+   "label": "Edits per 24 hours",
+   "non_negative": 1
+  },
+  {
+   "default": "20",
+   "fieldname": "reports_day",
+   "fieldtype": "Int",
+   "label": "Reports per 24 hours",
+   "non_negative": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-05 10:00:00.000000",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Gameplan",
  "name": "GP Posting Settings",

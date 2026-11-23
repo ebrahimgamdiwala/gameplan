@@ -6,6 +6,7 @@ import { refuseOffline } from './offline/requests'
 import { currentQuickReactionEmojis } from './reactionPreferences'
 import { session } from './session'
 import { useUser } from './users'
+import { errorText } from '@/utils'
 
 type Reaction = Pick<GPReaction, 'name' | 'emoji' | 'user'>
 
@@ -126,9 +127,10 @@ export function useReactions(options: UseReactionsOptions) {
       }
       settle()
     },
-    onError() {
+    onError(error: unknown) {
       // Dropping the batch is the rollback: those emojis fall back to server state.
-      toast.error('Could not save your reaction')
+      // The server's reason, such as a daily limit, says when to try again.
+      toast.error(errorText(error, 'Could not save your reaction.'))
       settle()
     },
   })

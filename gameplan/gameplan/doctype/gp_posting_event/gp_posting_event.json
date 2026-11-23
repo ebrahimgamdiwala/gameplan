@@ -26,7 +26,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Kind",
-   "options": "discussion\nreply",
+   "options": "discussion\nreply\nreaction\nedit\nreport",
    "reqd": 1
   },
   {
@@ -40,7 +40,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-04 20:24:33.587729",
+ "modified": "2026-11-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Gameplan",
  "name": "GP Posting Event",

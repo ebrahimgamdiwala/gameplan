@@ -8,7 +8,7 @@ export type LevelNumber = 0 | 1 | 2 | 3 | 4
 export const levelDescriptions: Record<LevelNumber, string> = {
   0: 'Posts wait for approval where a Community requires it. New-account limits apply on the first day, on consecutive replies, and on links, media, files and mentions in each post.',
   1: 'The New limits end, apart from a higher limit on the first day. The site per-post limits apply.',
-  2: 'Can post twice as often.',
+  2: 'Can post twice as often, and gets more reactions, edits and reports a day where daily limits are on.',
   3: 'Posts skip the per-post limits. Kept while the member stays active. Where only trusted members manage posts, can retitle and move any discussion.',
   4: 'Set by a global admin, and never rechecked. Where only trusted members manage posts, can also edit, close and pin any post.',
 }
@@ -36,6 +36,15 @@ export type MemberLevel = {
 
 export type SettingSection = { title: string; description?: string; fields: [string, string][] }
 
+function dailyMultiplier(field: string): SettingSection {
+  return {
+    title: 'Daily limits',
+    description:
+      'Times the site daily limits on reactions, edits and reports, where they are on in Posting rules. At least the level below',
+    fields: [[field, 'Multiplier']],
+  }
+}
+
 export const SETTING_GROUPS: { title: string; sections: SettingSection[] }[] = [
   {
     title: 'New',
@@ -51,7 +60,7 @@ export const SETTING_GROUPS: { title: string; sections: SettingSection[] }[] = [
       {
         title: 'Consecutive replies',
         description:
-          "Maximum replies a new member can post in a discussion before someone else responds. Discussions they created have no limit",
+          'Maximum replies a new member can post in a discussion before someone else responds. Discussions they created have no limit',
         fields: [['new_replies_per_discussion', 'Maximum replies']],
       },
       {
@@ -114,6 +123,7 @@ export const SETTING_GROUPS: { title: string; sections: SettingSection[] }[] = [
           ['contributor_received', 'Reactions received'],
         ],
       },
+      dailyMultiplier('contributor_daily_multiplier'),
     ],
   },
   {
@@ -156,8 +166,10 @@ export const SETTING_GROUPS: { title: string; sections: SettingSection[] }[] = [
           ['regular_restriction_days', 'Days with no restriction'],
         ],
       },
+      dailyMultiplier('regular_daily_multiplier'),
     ],
   },
+  { title: 'Leader', sections: [dailyMultiplier('leader_daily_multiplier')] },
 ]
 
 export type TrustSettings = { enabled: number; ranges: Record<string, [number, number]> } & Record<

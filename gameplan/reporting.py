@@ -7,6 +7,7 @@ from frappe.query_builder.functions import Count
 from frappe.utils import now_datetime
 
 import gameplan
+from gameplan.action_limits import record as record_action
 from gameplan.community_bans import can_moderate_community, require_participation
 from gameplan.mixins.moderation import is_removed, parent_discussion
 from gameplan.paging import page_start
@@ -79,6 +80,8 @@ def submit(doctype: str, name: str, reason: str, note: str = ""):
 	)
 	if len(recent) >= 10:
 		frappe.throw("You can submit 10 reports per hour. Try again later.", frappe.RateLimitExceededError)
+	# The daily limit grows with trust level, and the stricter of the two wins (D137).
+	record_action("report", doc)
 	review = (
 		pending[0]
 		if pending

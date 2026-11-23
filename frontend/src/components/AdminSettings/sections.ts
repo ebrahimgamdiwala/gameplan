@@ -308,7 +308,7 @@ export const adminSections: AdminSection[] = [
     id: 'posting',
     label: 'Posting rules',
     icon: 'lucide-pen-line',
-    keywords: 'posting limits rate caps',
+    keywords: 'posting limits rate caps daily reactions edits reports',
     groups: [
       {
         settings: [
@@ -361,6 +361,17 @@ export const adminSections: AdminSection[] = [
           postingLimit('max_images', 'Images per post', 'caps_enabled'),
           postingLimit('max_attachments', 'Files and videos per post', 'caps_enabled'),
           postingLimit('max_mentions', 'Mentions per post', 'caps_enabled'),
+          {
+            key: 'posting_limits_daily_enabled',
+            label: 'Daily limits',
+            type: 'switch',
+            default: false,
+            description:
+              'How many reactions, edits and reports one account can make in 24 hours. Higher trust levels get more. Community staff are exempt in their own Communities',
+          },
+          postingLimit('reactions_day', 'Reactions per 24 hours', 'daily_enabled'),
+          postingLimit('edits_day', 'Edits per 24 hours', 'daily_enabled'),
+          postingLimit('reports_day', 'Reports per 24 hours', 'daily_enabled'),
           {
             key: 'restrict_content_management',
             label: "Only trusted members manage other people's posts",
@@ -479,7 +490,7 @@ export const adminSections: AdminSection[] = [
     label: 'Trust levels',
     icon: 'lucide-signal',
     keywords:
-      'trust levels new basic contributor regular leader limits first day links images mentions',
+      'trust levels new basic contributor regular leader limits first day links images mentions daily multiplier',
     groups: [
       {
         settings: [

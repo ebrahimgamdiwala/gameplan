@@ -1,6 +1,6 @@
 # Trust levels
 
-Decisions D103 to D133 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
+Decisions D103 to D137 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
 
 Trust levels mirror Discourse. Each person has one site-wide level. Members earn the first three levels from what they do, keep Regular only while they stay active, and get Leader only by hand. Levels are off until a global admin turns them on.
 
@@ -10,11 +10,23 @@ Trust levels mirror Discourse. Each person has one site-wide level. Members earn
 | --- | --- | --- | --- |
 | 0 New | Joining | Approval in Communities that hold New posts. The New limits: 3 discussions and 10 replies on the first day, 3 consecutive replies in someone else's discussion, and per post 2 links, 5 images or videos, no files, 2 mentions, no @everyone. | 1 |
 | 1 Basic | 5 discussions entered, visits on 2 days, 1 accepted post | The New limits end, apart from 6 discussions and 30 replies on the first day. The site content caps apply. | 1 |
-| 2 Contributor | Visits on 15 days, 1 reaction given, 1 received, replies in 3 discussions, 20 discussions entered | Twice the posting-rate limits | 2 |
-| 3 Regular | In the last 100 days: visits on 50 days, replies in 10 discussions, 25% of new discussions entered (at most 500), 30 reactions given, 20 received from at least 5 people, at most 5 posts removed by moderators. No ban, suspension, or silence in the last 180 days. | Skips the content caps. In forum mode, retitles and moves any discussion (D136). | 3 |
-| 4 Leader | A global admin only | In forum mode, edits, closes and pins any post (D136) | 3 |
+| 2 Contributor | Visits on 15 days, 1 reaction given, 1 received, replies in 3 discussions, 20 discussions entered | Twice the posting-rate limits. 1.5 times the daily limits (D137). | 2 |
+| 3 Regular | In the last 100 days: visits on 50 days, replies in 10 discussions, 25% of new discussions entered (at most 500), 30 reactions given, 20 received from at least 5 people, at most 5 posts removed by moderators. No ban, suspension, or silence in the last 180 days. | Skips the content caps. Twice the daily limits. In forum mode, retitles and moves any discussion (D136). | 3 |
+| 4 Leader | A global admin only | Three times the daily limits. In forum mode, edits, closes and pins any post (D136) | 3 |
 
 Global admins edit every number in Site administration. Each has a fixed range.
+
+## Daily limits
+
+A global admin switch in Posting rules (D137), off by default. Each account can act this many times in any 24 hours:
+
+| Action | Base | Discourse setting |
+| --- | --- | --- |
+| Reactions added | 50 | `max_likes_per_day` |
+| Edits: saved title or body changes to discussions, replies and polls | 30 | `max_edits_per_day` |
+| Reports | 20 | `max_flags_per_day` |
+
+Contributors get 1.5 times the base, Regulars 2 and Leaders 3. Each multiplier is set on the level's tab, from 1 to 5, and cannot be lower than the level below. While levels are off, everyone gets the base. The counts live in `GP Posting Event`, beside the posting rate.
 
 ## New and Basic limits
 
