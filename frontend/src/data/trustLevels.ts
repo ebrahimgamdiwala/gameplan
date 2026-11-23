@@ -36,6 +36,13 @@ export type MemberLevel = {
 
 export type SettingSection = { title: string; description?: string; fields: [string, string][] }
 
+/** Settings that pick a level rather than a number. Regular and Leader are never a start. */
+export const STARTING_LEVEL_FIELDS = ['new_start_level', 'invited_start_level']
+export const STARTING_LEVEL_OPTIONS = LEVEL_NAMES.slice(0, 3).map((label, value) => ({
+  label,
+  value: String(value),
+}))
+
 function dailyMultiplier(field: string): SettingSection {
   return {
     title: 'Daily limits',
@@ -49,6 +56,15 @@ export const SETTING_GROUPS: { title: string; sections: SettingSection[] }[] = [
   {
     title: 'New',
     sections: [
+      {
+        title: 'Starting level',
+        description:
+          'The level an account starts at. Invited accounts were created by accepting an invitation',
+        fields: [
+          ['new_start_level', 'New accounts'],
+          ['invited_start_level', 'Invited accounts'],
+        ],
+      },
       {
         title: 'First day limits',
         description: 'In the 24 hours after the account is created. Polls count as replies',

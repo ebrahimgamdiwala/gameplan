@@ -490,7 +490,7 @@ export const adminSections: AdminSection[] = [
     label: 'Trust levels',
     icon: 'lucide-signal',
     keywords:
-      'trust levels new basic contributor regular leader limits first day links images mentions daily multiplier',
+      'trust levels new basic contributor regular leader limits first day links images mentions starting invited daily multiplier',
     groups: [
       {
         settings: [

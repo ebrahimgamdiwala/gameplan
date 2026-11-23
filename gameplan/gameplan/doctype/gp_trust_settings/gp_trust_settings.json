@@ -29,6 +29,8 @@
   "regular_restriction_days",
   "regular_grace_days",
   "new_limits_section",
+  "new_start_level",
+  "invited_start_level",
   "new_first_day_discussions",
   "new_first_day_replies",
   "new_replies_per_discussion",
@@ -203,6 +205,20 @@
    "fieldname": "new_limits_section",
    "fieldtype": "Section Break",
    "label": "New limits"
+  },
+  {
+   "fieldname": "new_start_level",
+   "fieldtype": "Int",
+   "label": "Starting level for new accounts",
+   "default": "0",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "invited_start_level",
+   "fieldtype": "Int",
+   "label": "Starting level for invited accounts",
+   "default": "1",
+   "non_negative": 1
   },
   {
    "fieldname": "new_first_day_discussions",

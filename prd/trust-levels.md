@@ -1,6 +1,6 @@
 # Trust levels
 
-Decisions D103 to D137 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
+Decisions D103 to D138 in [moderation decisions](moderation-decisions.md). They replace the per-Community design (D62 to D77).
 
 Trust levels mirror Discourse. Each person has one site-wide level. Members earn the first three levels from what they do, keep Regular only while they stay active, and get Leader only by hand. Levels are off until a global admin turns them on.
 
@@ -15,6 +15,19 @@ Trust levels mirror Discourse. Each person has one site-wide level. Members earn
 | 4 Leader | A global admin only | Three times the daily limits. In forum mode, edits, closes and pins any post (D136) | 3 |
 
 Global admins edit every number in Site administration. Each has a fixed range.
+
+## Starting levels
+
+Global admins set the level an account starts at (D138), as Discourse's `default_trust_level` and `default_invitee_trust_level`.
+
+| Account | Default |
+| --- | --- |
+| New: signed up, or added by a global admin | New |
+| Invited: created by accepting a Gameplan invitation | Basic |
+
+- Each is New, Basic or Contributor.
+- It is a floor, applied once, when the level is first worked out. A member who has earned more gets the earned level. Existing levels never change.
+- A start above New adds a "Starting Level" entry to the account history. The member gets no notification.
 
 ## Daily limits
 

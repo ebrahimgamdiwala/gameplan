@@ -27,6 +27,7 @@ LEVEL_ACTIONS = (
 	"Level Unlocked",
 	"Regular Promotion",
 	"Regular Demotion",
+	"Starting Level",
 )
 REMOVAL_ACTIONS = ("Ban", "Suspend", "Silence")
 # Setting: (default, smallest, largest).
@@ -64,13 +65,19 @@ LIMITS = {
 	"basic_first_day_discussions": (6, 0, 1000),
 	"basic_first_day_replies": (30, 0, 1000),
 }
+# The level an account starts at, as in Discourse's default_trust_level and
+# default_invitee_trust_level (D138). Regular and Leader are never a starting level.
+STARTING_LEVELS = {
+	"new_start_level": (NEW, NEW, CONTRIBUTOR),
+	"invited_start_level": (BASIC, NEW, CONTRIBUTOR),
+}
 # How many times the daily reaction, edit and report limits each level gets (D137).
 MULTIPLIERS = {
 	"contributor_daily_multiplier": (1.5, 1, 5),
 	"regular_daily_multiplier": (2, 1, 5),
 	"leader_daily_multiplier": (3, 1, 5),
 }
-SETTINGS = {**REQUIREMENTS, **LIMITS}
+SETTINGS = {**REQUIREMENTS, **LIMITS, **STARTING_LEVELS}
 ALL_SETTINGS = {**SETTINGS, **MULTIPLIERS}
 JOB_BATCH = 500
 COMMIT_EVERY = 50
@@ -134,15 +141,36 @@ def ensure_row(user):
 	if row:
 		row.level = cint(row.level)
 		return row
-	level = early_level(user, config())
+	cfg = config()
+	earned = early_level(user, cfg)
+	invited = is_invited(user)
+	start = cfg.invited_start_level if invited else cfg.new_start_level
+	level = max(earned, start)
 	try:
 		frappe.get_doc(doctype="GP Trust Level", user=user, level=level).insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
 		# Another request created it first.
 		pass
+	else:
+		if start > earned:
+			# Record why a member who has done nothing yet is above New (D138).
+			reason = "Invited account" if invited else "New account"
+			log_level(user, "Starting Level", reason, NEW, level)
 	row = stored_row(user)
 	row.level = cint(row.level)
 	return row
+
+
+def is_invited(user):
+	"""Whether accepting a Gameplan invitation created the account (D138).
+
+	Matches the User's email field, not its ID, so it keeps working once Frappe gives new users
+	random IDs (frappe/frappe#47933).
+	"""
+	email = frappe.db.get_value("User", user, "email")
+	return bool(email) and bool(
+		frappe.db.exists("GP Invitation", {"email": email, "status": "Accepted", "created_account": 1})
+	)
 
 
 # Signals --------------------------------------------------------------------------------------

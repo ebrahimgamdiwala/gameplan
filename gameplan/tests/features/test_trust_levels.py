@@ -10,7 +10,14 @@ from gameplan.posting_limits import save_settings as save_posting_settings
 from gameplan.restriction_queries import account_history
 from gameplan.restrictions import set_restriction, utc_now
 from gameplan.tests.base import GameplanTestCase
-from gameplan.tests.fixtures import create_comment, create_community, create_discussion, create_space
+from gameplan.tests.fixtures import (
+	create_comment,
+	create_community,
+	create_discussion,
+	create_member,
+	create_space,
+	create_user,
+)
 from gameplan.trust_levels import (
 	BASIC,
 	CONTRIBUTOR,
@@ -374,6 +381,67 @@ class TestBackfill(TrustLevelTestCase):
 			set_level(self.member.name, CONTRIBUTOR, "Known contributor")
 		self.run_jobs(backfill)
 		self.assertEqual(self.level(), CONTRIBUTOR)
+
+
+class TestStartingLevels(TrustLevelTestCase):
+	def invite(self, email):
+		"""Accept a member invitation that creates the account, as the invite link does."""
+		with patch("frappe.sendmail"):
+			invitation = frappe.get_doc(doctype="GP Invitation", email=email, role="Gameplan Member").insert(
+				ignore_permissions=True
+			)
+			invitation.accept()
+		return frappe.get_doc("User", {"email": email})
+
+	def test_new_and_invited_accounts_start_at_their_own_levels(self):
+		self.turn_on()
+		invited = self.invite("invited-start@example.com")
+		self.assertEqual(level_of(self.member.name), NEW)
+		self.assertEqual(level_of(invited.name), BASIC)
+		self.turn_on(new_start_level=BASIC, invited_start_level=CONTRIBUTOR)
+		joined = create_member("joined-start@example.com", "Joined")
+		self.assertEqual(level_of(joined.name), BASIC)
+		self.assertEqual(level_of(self.invite("invited-later@example.com").name), CONTRIBUTOR)
+
+	def test_the_starting_level_is_recorded_without_telling_the_member(self):
+		self.turn_on()
+		invited = self.invite("invited-log@example.com")
+		level_of(invited.name)
+		[entry] = self.logs("Starting Level", invited)
+		self.assertEqual(
+			(entry.previous_level, entry.level, entry.reason), ("New", "Basic", "Invited account")
+		)
+		self.assertEqual(self.notifications(invited), [])
+		# Starting at New records nothing.
+		level_of(self.member.name)
+		self.assertEqual(self.logs("Starting Level"), [])
+
+	def test_an_earned_level_above_the_starting_level_wins(self):
+		self.earn_member()
+		self.turn_on()
+		self.assertEqual(level_of(self.member.name), CONTRIBUTOR)
+		self.assertEqual(self.logs("Starting Level"), [])
+
+	def test_a_new_setting_leaves_existing_levels_alone(self):
+		self.turn_on()
+		level_of(self.member.name)
+		self.turn_on(new_start_level=CONTRIBUTOR)
+		self.assertEqual(level_of(self.member.name), NEW)
+
+	def test_an_existing_account_given_access_by_invitation_is_not_invited(self):
+		self.turn_on()
+		existing = create_user("existing-start@example.com", "Existing")
+		with patch("frappe.sendmail"):
+			frappe.get_doc(doctype="GP Invitation", email=existing.email, role="Gameplan Member").insert(
+				ignore_permissions=True
+			).accept()
+		self.assertEqual(level_of(existing.name), NEW)
+
+	def test_starting_levels_stop_at_contributor(self):
+		with self.assertRaises(frappe.ValidationError):
+			self.turn_on(new_start_level=REGULAR)
+		with self.assertRaises(frappe.ValidationError):
+			self.turn_on(invited_start_level=LEADER)
 
 
 class TestPrivileges(TrustLevelTestCase):
