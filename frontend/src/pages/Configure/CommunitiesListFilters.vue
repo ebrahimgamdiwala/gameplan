@@ -9,7 +9,12 @@
         <span class="lucide-search h-4 w-4 text-ink-gray-4" />
       </template>
     </TextInput>
-    <Select class="shrink-0" :options="visibilityOptions" v-model="visibilityFilter" />
+    <Select
+      v-if="isGlobalAdmin(useSessionUser())"
+      class="shrink-0"
+      :options="visibilityOptions"
+      v-model="visibilityFilter"
+    />
   </div>
 </template>
 
@@ -17,6 +22,8 @@
 import { computed } from 'vue'
 import { Select, TextInput } from 'frappe-ui'
 import { communities } from '@/data/communities'
+import { useSessionUser } from '@/data/users'
+import { isGlobalAdmin } from '@/utils/permissions'
 import { visibilityFilterOptions, type VisibilityFilter } from '@/utils/visibility'
 
 const search = defineModel<string>('search', { default: '' })

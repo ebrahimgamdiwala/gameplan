@@ -7,7 +7,11 @@
             <span class="lucide-search h-4 w-4 text-ink-gray-4" />
           </template>
         </TextInput>
-        <Select :options="visibilityOptions" v-model="visibilityFilter" />
+        <Select
+          v-if="canManageCommunity(community, useSessionUser())"
+          :options="visibilityOptions"
+          v-model="visibilityFilter"
+        />
       </div>
       <slot name="action" />
     </div>
@@ -17,6 +21,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Select, TextInput } from 'frappe-ui'
+import { useCommunity } from '@/data/communities'
+import { useSessionUser } from '@/data/users'
+import { canManageCommunity } from '@/utils/permissions'
 import { useCommunitySpaceData } from './useCommunitySpaceData'
 import { visibilityFilterOptions, type VisibilityFilter } from '@/utils/visibility'
 
@@ -24,6 +31,7 @@ const props = defineProps<{ communityId: string }>()
 const search = defineModel<string>('search', { default: '' })
 const visibilityFilter = defineModel<VisibilityFilter>('visibilityFilter', { default: 'All' })
 
+const community = useCommunity(() => props.communityId)
 const { communitySpaces } = useCommunitySpaceData(() => props.communityId)
 
 const visibilityOptions = computed(() => visibilityFilterOptions(communitySpaces.value))
